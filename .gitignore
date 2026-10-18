@@ -1,0 +1,25 @@
+# Dependencies and build output
+node_modules/
+dist/
+coverage/
+
+# Wrangler local state
+.wrangler/
+
+# Local secrets. Real values only ever go in through `wrangler secret put`.
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+.env
+.env.*
+!.env.example
+*.service-account.json
+service-account*.json
+secrets/
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log
