@@ -63,6 +63,8 @@ flowchart TB
   indexTs["index.ts"] --> jobs
   indexTs --> config
   indexTs --> notifiers
+  indexTs --> sources
+  indexTs --> lib
   jobs --> sources
   jobs --> notifiers
   jobs --> store
@@ -75,6 +77,7 @@ flowchart TB
   sources --> lib
   notifiers --> lib
   store --> lib
+  config --> lib
 ```
 
 - **`core/` imports nothing but `lib/`'s pure helpers.** No `fetch`, no D1, no env, no store or platform knowledge. Everything here is a pure function with unit tests.
@@ -144,7 +147,8 @@ Any change that touches the matching area runs these before it lands. The full v
 ## Testing
 
 - **Unit (Vitest):** `core/`, `config/`, `sources/play/normalize`, the Discord renderers and signature verification. Fixtures in `test/fixtures/` are realistic API responses, including the edge cases (no author, no device metadata, translated, with a developer reply, multi-page).
-- **Integration (`@cloudflare/vitest-pool-workers`):** the Worker against a real local D1 with migrations applied, and `fetchMock` standing in for Google and Discord. Cron runs and interactions end to end, asserting D1 state and the exact outbound calls.
+- **Integration (`@cloudflare/vitest-plugin`, which replaced `@cloudflare/vitest-pool-workers`):** the Worker inside the Workers runtime against a real local D1 with migrations applied. Cloudflare removed `fetchMock`, so tests stub `globalThis.fetch` to stand in for Google and Discord and restore it afterwards. Cron runs and interactions end to end, asserting D1 state and the exact outbound calls.
+- **Test secrets are placeholders.** Wrangler reads `.dev.vars` for the test runtime too, so `vitest.config.ts` overrides every secret binding with a placeholder, and a test asserts it. A new secret gets a placeholder there in the same change.
 - **Manual, on the dev Worker:** real Lune reviews into the test channel, `DRY_RUN=true`; real replies only with the owner's go-ahead.
 
 ---

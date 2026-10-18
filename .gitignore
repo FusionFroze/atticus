@@ -24,5 +24,6 @@ secrets/
 Thumbs.db
 *.log
 
-# Service Account Keys
-atticus-512002-e41b288dd4a7.json
+# Service-account keys belong outside the repo. This catches a stray or rotated key
+# from the Google Cloud project, whose files are named <project-id>-<key-id>.json.
+atticus-512002-*.json

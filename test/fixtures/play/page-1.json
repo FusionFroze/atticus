@@ -1,0 +1,71 @@
+{
+  "reviews": [
+    {
+      "reviewId": "review-full",
+      "authorName": "Avery Quinn",
+      "comments": [
+        {
+          "userComment": {
+            "text": "Night mode\tThe lamp stays on after sunrise.",
+            "lastModified": { "seconds": "1760700000", "nanos": 100000000 },
+            "starRating": 2,
+            "reviewerLanguage": "en",
+            "device": "samplephone",
+            "androidOsVersion": 34,
+            "appVersionCode": 120,
+            "appVersionName": "2.4.0",
+            "thumbsUpCount": 4,
+            "thumbsDownCount": 1,
+            "deviceMetadata": {
+              "productName": "Sample Phone",
+              "manufacturer": "Example",
+              "deviceClass": "phone",
+              "screenWidthPx": 1080,
+              "screenHeightPx": 2400,
+              "nativePlatform": "arm64-v8a",
+              "screenDensityDpi": 420,
+              "glEsVersion": 196610,
+              "cpuModel": "SampleChip",
+              "cpuMake": "Example",
+              "ramMb": 8192
+            }
+          }
+        },
+        {
+          "developerComment": {
+            "text": "Thanks, we are looking at that lamp.",
+            "lastModified": { "seconds": "1760710000", "nanos": 0 }
+          }
+        }
+      ]
+    },
+    {
+      "reviewId": "review-translated",
+      "authorName": "Casey Morgan",
+      "comments": [
+        {
+          "userComment": {
+            "text": "Translated sample: the alarm was late.",
+            "originalText": "Exemple traduit.",
+            "lastModified": { "seconds": "1760720000", "nanos": 0 },
+            "starRating": 4,
+            "reviewerLanguage": "fr"
+          }
+        }
+      ]
+    },
+    {
+      "reviewId": "review-minimal",
+      "comments": [
+        {
+          "userComment": {
+            "text": "Five stars, no other details.",
+            "lastModified": { "seconds": "1760730000" },
+            "starRating": 5
+          }
+        }
+      ]
+    }
+  ],
+  "tokenPagination": { "nextPageToken": "page-2" }
+}

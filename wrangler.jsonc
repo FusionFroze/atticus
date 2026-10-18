@@ -1,0 +1,36 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "atticus",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-18",
+  // Logs on, so `wrangler tail` can show the cron's CPU time. No D1 until v1-2.
+  "observability": { "enabled": true },
+  "triggers": { "crons": ["*/15 * * * *"] },
+  // Discord ids below are placeholders. Real values arrive with the Discord app (v1-3),
+  // via `.dev.vars` locally and `wrangler.jsonc` for a deploy. Secrets are never vars.
+  "vars": {
+    "APPS": [{ "store": "play", "id": "com.fusionfroze.Lune", "name": "Lune" }],
+    "DISCORD_APPLICATION_ID": "100000000000000000",
+    "DISCORD_PUBLIC_KEY": "0000000000000000000000000000000000000000000000000000000000000000",
+    "DISCORD_CHANNEL_ID": "200000000000000000",
+    "ALLOWED_USER_IDS": "300000000000000000",
+    "TIMEZONE": "Asia/Kolkata"
+  },
+  // Bindings are not inherited, so env.dev repeats vars. DRY_RUN stays on there (V80).
+  "env": {
+    "dev": {
+      "name": "atticus-dev",
+      "vars": {
+        "APPS": [
+          { "store": "play", "id": "com.fusionfroze.Lune", "name": "Lune" }
+        ],
+        "DISCORD_APPLICATION_ID": "100000000000000000",
+        "DISCORD_PUBLIC_KEY": "0000000000000000000000000000000000000000000000000000000000000000",
+        "DISCORD_CHANNEL_ID": "200000000000000000",
+        "ALLOWED_USER_IDS": "300000000000000000",
+        "TIMEZONE": "Asia/Kolkata",
+        "DRY_RUN": true
+      }
+    }
+  }
+}

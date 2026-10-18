@@ -6,6 +6,7 @@ The short, public list of how Atticus is built and why. Each line points to the 
 
 - **One Cloudflare Worker on the free tier, self-hosted** (V1). One deploy, one config, one log stream, no running cost, and nobody else ever holds your credentials.
 - **Zero runtime dependencies** (V2). Google's JWT signing and Discord's Ed25519 verification use the Workers' built-in WebCrypto, so there's nothing to audit or update and the bundle stays tiny.
+- **Tests run inside the Workers runtime with `@cloudflare/vitest-plugin`** (V2). Cloudflare replaced `@cloudflare/vitest-pool-workers`. Outbound HTTP in tests is stubbed with `fetch`, because Cloudflare removed `fetchMock`.
 - **The name is Atticus** (V3). Short and human, and not tied to one store or chat app.
 - **TypeScript, strict, small files** (V4), so contributors can read the whole thing.
 
