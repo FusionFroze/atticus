@@ -23,3 +23,6 @@ secrets/
 .DS_Store
 Thumbs.db
 *.log
+
+# Service Account Keys
+atticus-512002-e41b288dd4a7.json
