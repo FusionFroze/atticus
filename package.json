@@ -10,6 +10,8 @@
     "dev": "wrangler dev --test-scheduled",
     "deploy": "wrangler deploy",
     "deploy:dev": "wrangler deploy --env dev",
+    "db:migrate": "wrangler d1 migrations apply atticus --remote",
+    "db:migrate:dev": "wrangler d1 migrations apply atticus-dev --remote --env dev",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "test": "vitest run",

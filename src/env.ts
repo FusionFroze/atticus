@@ -1,5 +1,6 @@
 // Bindings the Worker receives. Secrets arrive as strings; JSON vars may arrive already parsed.
 export type Env = {
+  DB: D1Database;
   APPS: string | readonly unknown[];
   GOOGLE_SERVICE_ACCOUNT_JSON: string;
   DISCORD_BOT_TOKEN: string;

@@ -29,6 +29,7 @@ The short, public list of how Atticus is built and why. Each line points to the 
 - **One cron every 15 minutes does everything, including the digest timing** (V30, V71). The digest follows your `TIMEZONE`, handles daylight saving, and uses no extra cron trigger.
 - **Each store is an adapter behind one `Review` type** (V40), so App Store support can plug in later without touching the core.
 - **Precise diff rules** for new, edited, replied-elsewhere and reply-removed reviews (V32), and per-app first-run handling (V33).
+- **First run is `post` or `silent`** (V33). There is no `summary` mode. The Connected message carries the count either way.
 
 ## Discord
 

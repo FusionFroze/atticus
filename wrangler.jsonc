@@ -3,9 +3,19 @@
   "name": "atticus",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-18",
-  // Logs on, so `wrangler tail` can show the cron's CPU time. No D1 until v1-2.
+  // Logs on, so `wrangler tail` can show the cron's CPU time.
   "observability": { "enabled": true },
   "triggers": { "crons": ["*/15 * * * *"] },
+  // Placeholder id so local tests have a DB binding. The real atticus-dev id
+  // lives only under env.dev, so a dev deploy cannot use this placeholder.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "atticus",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
   // Discord ids below are placeholders. Real values arrive with the Discord app (v1-3),
   // via `.dev.vars` locally and `wrangler.jsonc` for a deploy. Secrets are never vars.
   "vars": {
@@ -20,6 +30,14 @@
   "env": {
     "dev": {
       "name": "atticus-dev",
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "atticus-dev",
+          "database_id": "1fd22e57-e524-4f6a-a15e-d95ba32eb398",
+          "migrations_dir": "migrations"
+        }
+      ],
       "vars": {
         "APPS": [
           { "store": "play", "id": "com.fusionfroze.Lune", "name": "Lune" }

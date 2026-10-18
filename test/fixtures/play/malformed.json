@@ -1,0 +1,39 @@
+{
+  "reviews": [
+    {
+      "reviewId": "review-rating-0",
+      "comments": [
+        {
+          "userComment": {
+            "text": "Zero stars.",
+            "lastModified": { "seconds": "1760750000" },
+            "starRating": 0
+          }
+        }
+      ]
+    },
+    {
+      "reviewId": "review-rating-6",
+      "comments": [
+        {
+          "userComment": {
+            "text": "Six stars.",
+            "lastModified": { "seconds": "1760750001" },
+            "starRating": 6
+          }
+        }
+      ]
+    },
+    {
+      "reviewId": "review-no-modified",
+      "comments": [
+        {
+          "userComment": {
+            "text": "No timestamp.",
+            "starRating": 3
+          }
+        }
+      ]
+    }
+  ]
+}

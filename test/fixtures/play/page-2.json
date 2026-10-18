@@ -1,0 +1,20 @@
+{
+  "reviews": [
+    {
+      "reviewId": "review-page-2",
+      "authorName": "Riley Chen",
+      "comments": [
+        {
+          "userComment": {
+            "text": "No title on this one.",
+            "lastModified": { "seconds": "1760740000" },
+            "starRating": 3,
+            "device": "fallback-device",
+            "androidOsVersion": 33,
+            "thumbsUpCount": 0
+          }
+        }
+      ]
+    }
+  ]
+}

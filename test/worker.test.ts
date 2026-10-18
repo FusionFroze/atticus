@@ -113,7 +113,13 @@ describe("worker", () => {
             reviewId: "review-1",
             authorName: "Should Not Log Author",
             comments: [
-              { userComment: { text: "Should Not Log Body", starRating: 2 } },
+              {
+                userComment: {
+                  text: "Should Not Log Body",
+                  starRating: 2,
+                  lastModified: { seconds: "1700000000" },
+                },
+              },
             ],
           },
         ],
@@ -121,7 +127,14 @@ describe("worker", () => {
     }) as typeof fetch;
 
     try {
+      await testEnv.DB.batch([
+        testEnv.DB.prepare("DELETE FROM messages"),
+        testEnv.DB.prepare("DELETE FROM outbox"),
+        testEnv.DB.prepare("DELETE FROM reviews"),
+        testEnv.DB.prepare("DELETE FROM state"),
+      ]);
       const env = validEnv();
+      env.DB = testEnv.DB;
       env.GOOGLE_SERVICE_ACCOUNT_JSON = JSON.stringify({
         client_email: "atticus@example.iam.gserviceaccount.com",
         private_key: pem,
