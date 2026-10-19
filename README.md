@@ -249,9 +249,7 @@ npm run db:migrate
 npm run deploy
 ```
 
-- **Why commit first:** `git pull` brings in new Atticus commits, and git won't merge them into a file with uncommitted edits. Committing your `wrangler.jsonc` keeps your values, and git merges the new changes around them. Once your config is committed, the first line has nothing to do and says so, which is fine.
-- `--no-edit` takes git's default merge message, so no text editor opens. If git reports a conflict in `wrangler.jsonc`, keep your values, then `git commit -am "Merge"`.
-- `db:migrate` applies only new database migrations. When there are none, it says so.
+The first line commits your `wrangler.jsonc`, so the pull can't overwrite it. If git reports a conflict in that file, keep your values, then run `git commit -am "Merge"`.
 
 ## License
 
