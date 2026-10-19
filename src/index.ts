@@ -36,7 +36,8 @@ export default {
       }),
       budget,
       nowMs,
-      afterApps: () => send({ db: env.DB, config, notifier, budget, nowMs }),
+      afterApps: (state) =>
+        send({ db: env.DB, config, notifier, budget, nowMs, state }),
     });
   },
 

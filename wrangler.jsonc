@@ -3,29 +3,38 @@
   "name": "atticus",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-18",
-  // Logs on, so `wrangler tail` can show the cron's CPU time.
+  // Logs on, so `npx wrangler tail` and the dashboard show each run.
   "observability": { "enabled": true },
+  // How often Atticus checks Google Play. Every 15 minutes.
   "triggers": { "crons": ["*/15 * * * *"] },
-  // Placeholder id so local tests have a DB binding. The real atticus-dev id
-  // lives only under env.dev, so a dev deploy cannot use this placeholder.
+  // Your D1 database. Put the id that `npx wrangler d1 create atticus` printed (README → Deploy).
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "atticus",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "REPLACE_WITH_DATABASE_ID",
       "migrations_dir": "migrations"
     }
   ],
-  // Discord ids below are placeholders. Real values arrive with the Discord app (v1-3),
-  // via `.dev.vars` locally and `wrangler.jsonc` for a deploy. Secrets are never vars.
+  // Replace every REPLACE_WITH_… value (README → Deploy, Configuration).
+  // In `npx wrangler tail`, a Discord value left as it is shows as a config_invalid that
+  // names it, and a package name left as it is shows as poll_failed with not_found.
+  // The two secrets never go here: use `npx wrangler secret put` (README → Deploy).
   "vars": {
-    "APPS": [{ "store": "play", "id": "com.fusionfroze.Lune", "name": "Lune" }],
-    "DISCORD_APPLICATION_ID": "100000000000000000",
-    "DISCORD_PUBLIC_KEY": "0000000000000000000000000000000000000000000000000000000000000000",
-    "DISCORD_CHANNEL_ID": "200000000000000000",
-    "ALLOWED_USER_IDS": "300000000000000000",
-    "TIMEZONE": "Asia/Kolkata"
+    "APPS": [
+      {
+        "store": "play",
+        "id": "REPLACE_WITH_PACKAGE_NAME",
+        "name": "REPLACE_WITH_APP_NAME"
+      }
+    ],
+    "DISCORD_APPLICATION_ID": "REPLACE_WITH_APPLICATION_ID",
+    "DISCORD_PUBLIC_KEY": "REPLACE_WITH_PUBLIC_KEY",
+    "DISCORD_CHANNEL_ID": "REPLACE_WITH_CHANNEL_ID",
+    "ALLOWED_USER_IDS": "REPLACE_WITH_YOUR_USER_ID",
+    "TIMEZONE": "UTC"
   },
+  // The maintainers' test Worker (`npm run deploy:dev`). Ignore it for your own deploy.
   // Bindings are not inherited, so env.dev repeats vars. DRY_RUN stays on there (V80).
   "env": {
     "dev": {

@@ -4,18 +4,19 @@ import type { AppConfig } from "../src/config/types";
 import type { Review, StoredReview } from "../src/core/review";
 import {
   claimPending,
+  finishRun,
   getState,
   insertReviewWithOutbox,
   markOutboxFailed,
   markOutboxRetry,
   markOutboxSent,
   pruneOutbox,
-  readLatestMessage,
   readReview,
+  readReviewForSend,
   readReviews,
   releaseLease,
   setState,
-  takeLease,
+  startRun,
   updateReview,
   writeFirstRun,
 } from "../src/store";
@@ -402,22 +403,41 @@ describe("updateReview", () => {
   });
 });
 
-describe("takeLease", () => {
+describe("startRun", () => {
   it("holds for ten minutes and release deletes only that value", async () => {
-    expect(await takeLease(env.DB, 1_000, "run-a")).toBe(true);
+    const first = await startRun(env.DB, 1_000, "run-a");
+    expect(first?.lease).toBe("1600:run-a");
     expect(await getState(env.DB, "lease")).toBe("1600:run-a");
-    expect(await takeLease(env.DB, 1_599, "run-b")).toBe(false);
+    expect(await startRun(env.DB, 1_599, "run-b")).toBeNull();
     expect(await getState(env.DB, "lease")).toBe("1600:run-a");
-    expect(await takeLease(env.DB, 1_600, "run-b")).toBe(true);
+    const second = await startRun(env.DB, 1_600, "run-b");
+    expect(second?.lease).toBe("2200:run-b");
+    await releaseLease(env.DB, "1600:run-a");
     expect(await getState(env.DB, "lease")).toBe("2200:run-b");
-    await releaseLease(env.DB, "run-a");
-    expect(await getState(env.DB, "lease")).toBe("2200:run-b");
-    await releaseLease(env.DB, "run-b");
+    await releaseLease(env.DB, "2200:run-b");
     expect(await getState(env.DB, "lease")).toBeNull();
 
-    expect(await takeLease(env.DB, 2_000, "run:a")).toBe(true);
-    await releaseLease(env.DB, "run:a");
+    const colon = await startRun(env.DB, 2_000, "run:a");
+    await releaseLease(env.DB, colon?.lease ?? "");
     expect(await getState(env.DB, "lease")).toBeNull();
+  });
+
+  it("returns every state row, including the lease it took", async () => {
+    await setState(env.DB, "digest_last", "2026-10-19", 900);
+    const started = await startRun(env.DB, 1_000, "run-a");
+    expect(started?.state).toEqual(
+      new Map([
+        ["digest_last", "2026-10-19"],
+        ["lease", "1600:run-a"],
+      ]),
+    );
+  });
+
+  it("finishes in one batch: last_poll_at, the prune, the release", async () => {
+    const started = await startRun(env.DB, 1_000, "run-a");
+    await finishRun(env.DB, { lease: started?.lease ?? "", nowSeconds: 1_000 });
+    expect(await getState(env.DB, "lease")).toBeNull();
+    expect(await getState(env.DB, "last_poll_at")).toBe("1000");
   });
 });
 
@@ -485,7 +505,8 @@ describe("readReview", () => {
       body: "Stored body",
     });
     expect(await readReview(env.DB, stored.id + 1)).toBeNull();
-    expect(await readLatestMessage(env.DB, stored.id)).toBeNull();
+    expect((await readReviewForSend(env.DB, stored.id))?.latest).toBeNull();
+    expect(await readReviewForSend(env.DB, stored.id + 1)).toBeNull();
 
     const pending = (await outbox()).find((row) => row.kind === "review_new");
     if (pending === undefined) throw new Error("missing review_new");
@@ -505,10 +526,12 @@ describe("readReview", () => {
       version: stored.modifiedAt,
       nowSeconds: NOW + 1,
     });
-    expect(await readLatestMessage(env.DB, stored.id)).toEqual({
+    const forSend = await readReviewForSend(env.DB, stored.id);
+    expect(forSend?.latest).toEqual({
       channelId: "channel-1",
       messageId: "message-2",
     });
+    expect(forSend?.review).toEqual(await readReview(env.DB, stored.id));
   });
 });
 

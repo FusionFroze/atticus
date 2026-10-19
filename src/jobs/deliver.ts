@@ -1,11 +1,12 @@
 import type { Config } from "../config/types";
 import type { StoredReview } from "../core/review";
 import type {
+  MessageRef,
   Notifier,
   ReviewMessageInput,
   SendResult,
 } from "../notifiers/types";
-import { type OutboxRow, readLatestMessage, readReview } from "../store";
+import { type OutboxRow, readReviewForSend } from "../store";
 
 // Reads the row at send time. A deleted Discord message is posted again, with
 // no reply reference, and that post becomes the latest message.
@@ -19,25 +20,23 @@ export async function postStoredReview(
   | { ok: true; result: SendResult; modifiedAt: number }
 > {
   if (row.reviewPk === null) return { ok: false, reason: "missing" };
-  const review = await readReview(db, row.reviewPk);
-  if (review === null) return { ok: false, reason: "missing" };
+  const read = await readReviewForSend(db, row.reviewPk);
+  if (read === null) return { ok: false, reason: "missing" };
   const result = await postOrEdit(
-    db,
     notifier,
     row,
-    reviewMessage(config, review, row.kind),
+    reviewMessage(config, read.review, row.kind),
+    read.latest,
   );
-  return { ok: true, result, modifiedAt: review.modifiedAt };
+  return { ok: true, result, modifiedAt: read.review.modifiedAt };
 }
 
 async function postOrEdit(
-  db: D1Database,
   notifier: Notifier,
   row: OutboxRow,
   message: ReviewMessageInput,
+  latest: MessageRef | null,
 ): Promise<SendResult> {
-  const latest =
-    row.reviewPk === null ? null : await readLatestMessage(db, row.reviewPk);
   if (row.kind === "review_edited") {
     return notifier.postReview(message, `o${row.id}`, latest);
   }

@@ -243,7 +243,7 @@ function cronConfig(
   };
 }
 
-function testPem(): Promise<string> {
+export function testPem(): Promise<string> {
   pemPromise ??= generatePem();
   return pemPromise;
 }

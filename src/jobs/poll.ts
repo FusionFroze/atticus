@@ -6,21 +6,18 @@ import { type LogValue, log } from "../lib/log";
 import type { ReviewSource, SourceFailure } from "../sources/types";
 import {
   appSeenKey,
-  getState,
+  finishRun,
   insertReviewWithOutbox,
-  pruneOutbox,
   type ReviewUpdateOutcome,
   readReviews,
   releaseLease,
-  setState,
-  takeLease,
+  startRun,
   updateReview,
   writeFirstRun,
 } from "../store";
 import { enqueueDueDigests } from "./digest";
 import { noteListFailure, noteListSuccess, noteRemovedApps } from "./health";
-
-const LAST_POLL_AT = "last_poll_at";
+import { createRunState, type RunState } from "./run-state";
 
 type RunCounts = {
   apps: number;
@@ -31,23 +28,27 @@ type RunCounts = {
   replyRemoved: number;
 };
 
-// Under the lease: list, diff, write, then the sender. First successful list sets
-// app_seen, even when truncated. A failed list does not.
-export async function poll(input: {
+type PollInput = {
   db: D1Database;
   config: Config;
   source: ReviewSource;
   budget: Budget;
   nowMs: number;
-  afterApps?: () => Promise<{ sent: number }>;
-}): Promise<void> {
+  afterApps?: (state: RunState) => Promise<{ sent: number }>;
+};
+
+// Under the lease: list, diff, write, then the sender. First successful list sets
+// app_seen, even when truncated. A failed list does not. The lease and the state
+// rows come in one batch at the start; last_poll_at, the prune and the release go
+// in one batch at the end.
+export async function poll(input: PollInput): Promise<void> {
   const nowSeconds = Math.floor(input.nowMs / 1000);
-  const holder = crypto.randomUUID();
-  const taken = await takeLease(input.db, nowSeconds, holder);
-  if (!taken) {
+  const started = await startRun(input.db, nowSeconds, crypto.randomUUID());
+  if (started === null) {
     log("run_skipped_locked");
     return;
   }
+  const state = createRunState(started.state);
 
   const counts: RunCounts = {
     apps: 0,
@@ -57,22 +58,24 @@ export async function poll(input: {
     replyExternal: 0,
     replyRemoved: 0,
   };
+  let finished = false;
   try {
     log("run_start");
-    await noteRemovedApps(input.db, input.config.apps, nowSeconds);
+    await noteRemovedApps(input.db, state, input.config.apps, nowSeconds);
     for (const app of input.config.apps) {
-      const stop = await pollApp(input, app, nowSeconds, counts);
+      const stop = await pollApp(input, state, app, nowSeconds, counts);
       if (stop) break;
     }
     await enqueueDueDigests({
       db: input.db,
       config: input.config,
+      state,
       nowMs: input.nowMs,
     });
     const sent =
-      input.afterApps === undefined ? 0 : (await input.afterApps()).sent;
-    await setState(input.db, LAST_POLL_AT, String(nowSeconds), nowSeconds);
-    await pruneOutbox(input.db, nowSeconds);
+      input.afterApps === undefined ? 0 : (await input.afterApps(state)).sent;
+    await finishRun(input.db, { lease: started.lease, nowSeconds });
+    finished = true;
     log("run_end", {
       durationMs: Date.now() - input.nowMs,
       apps: counts.apps,
@@ -84,18 +87,14 @@ export async function poll(input: {
       sent,
     });
   } finally {
-    await releaseLease(input.db, holder);
+    if (!finished) await releaseLease(input.db, started.lease);
   }
 }
 
 // True means the budget is spent and later apps wait for the next run.
 async function pollApp(
-  input: {
-    db: D1Database;
-    config: Config;
-    source: ReviewSource;
-    budget: Budget;
-  },
+  input: PollInput,
+  state: RunState,
   app: AppConfig,
   nowSeconds: number,
   counts: RunCounts,
@@ -108,11 +107,11 @@ async function pollApp(
       log("budget_exhausted");
       return true;
     }
-    await noteListFailure(input.db, app, listed.failure, nowSeconds);
+    await noteListFailure(input.db, state, app, listed.failure, nowSeconds);
     return false;
   }
 
-  await noteListSuccess(input.db, app.id, nowSeconds);
+  await noteListSuccess(input.db, state, app.id, nowSeconds);
   if (listed.truncated) log("poll_truncated", { appId: app.id });
   log("poll_app", {
     appId: app.id,
@@ -121,14 +120,14 @@ async function pollApp(
   });
   counts.apps += 1;
 
-  const seen = await getState(input.db, appSeenKey(app));
-  if (seen === null) {
+  if (state.get(appSeenKey(app)) === null) {
     await writeFirstRun(input.db, {
       app,
       reviews: listed.reviews,
       backfill: input.config.backfill,
       nowSeconds,
     });
+    state.set(appSeenKey(app), "1");
     counts.reviewNew += listed.reviews.length;
     for (const review of oldestFirst(listed.reviews)) {
       log("review_new", { appId: review.appId, reviewId: review.reviewId });

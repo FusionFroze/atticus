@@ -6,7 +6,7 @@ export {
   readDigestRows,
 } from "./digest";
 export { appSeenKey, writeFirstRun } from "./first-run";
-export { readLatestMessage } from "./messages";
+export { readReviewForSend } from "./messages";
 export type { OutboxRow } from "./outbox";
 export {
   claimPending,
@@ -22,13 +22,8 @@ export {
   readReviews,
   writeBotReply,
 } from "./reviews";
-export {
-  deleteState,
-  getState,
-  listStateByPrefix,
-  releaseLease,
-  setState,
-  takeLease,
-} from "./state";
+export type { RunStart } from "./run";
+export { finishRun, readAllState, releaseLease, startRun } from "./run";
+export { deleteState, getState, setState } from "./state";
 export type { ReviewUpdateOutcome } from "./update";
 export { updateReview } from "./update";

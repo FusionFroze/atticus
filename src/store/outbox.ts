@@ -152,14 +152,20 @@ export async function pruneOutbox(
   db: D1Database,
   nowSeconds: number,
 ): Promise<number> {
+  const result = await pruneStatement(db, nowSeconds).run();
+  return result.meta.changes;
+}
+
+export function pruneStatement(
+  db: D1Database,
+  nowSeconds: number,
+): D1PreparedStatement {
   const cutoff = nowSeconds - OUTBOX_KEEP_SECONDS;
-  const result = await db
+  return db
     .prepare(
       `DELETE FROM outbox
        WHERE (status = 'sent' AND sent_at < ?)
           OR (status = 'failed' AND created_at < ?)`,
     )
-    .bind(cutoff, cutoff)
-    .run();
-  return result.meta.changes;
+    .bind(cutoff, cutoff);
 }

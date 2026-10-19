@@ -7,14 +7,15 @@ import type { DigestInput } from "../notifiers/types";
 import {
   DIGEST_LAST_KEY,
   enqueueDigestBatch,
-  getState,
   readDigestRows,
   setState,
 } from "../store";
+import type { RunState } from "./run-state";
 
 export async function enqueueDueDigests(input: {
   db: D1Database;
   config: Config;
+  state: RunState;
   nowMs: number;
 }): Promise<void> {
   if (!input.config.digest.enabled) return;
@@ -27,12 +28,13 @@ export async function enqueueDueDigests(input: {
   const timing = digestTiming(
     input.nowMs,
     scheduled,
-    await getState(input.db, DIGEST_LAST_KEY),
+    input.state.get(DIGEST_LAST_KEY),
   );
   if (timing === "done") return;
   const nowSeconds = Math.floor(input.nowMs / 1000);
   if (timing === "late") {
     await setState(input.db, DIGEST_LAST_KEY, scheduled.localDate, nowSeconds);
+    input.state.set(DIGEST_LAST_KEY, scheduled.localDate);
     log("digest_skipped", { localDate: scheduled.localDate });
     return;
   }
@@ -45,6 +47,7 @@ export async function enqueueDueDigests(input: {
       sortKey: windowEnd,
     })),
   });
+  input.state.set(DIGEST_LAST_KEY, scheduled.localDate);
   for (const app of input.config.apps) {
     log("digest_enqueued", { appId: app.id, localDate: scheduled.localDate });
   }

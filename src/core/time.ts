@@ -73,7 +73,19 @@ export function digestTiming(
   return "due";
 }
 
+// Building a formatter with a time zone is the costly part, so one is kept per zone.
+const formatters = new Map<string, Intl.DateTimeFormat>();
+
 function formatter(timeZone: string): Intl.DateTimeFormat {
+  let found = formatters.get(timeZone);
+  if (found === undefined) {
+    found = createFormatter(timeZone);
+    formatters.set(timeZone, found);
+  }
+  return found;
+}
+
+function createFormatter(timeZone: string): Intl.DateTimeFormat {
   return new Intl.DateTimeFormat("en-US", {
     timeZone,
     hourCycle: "h23",

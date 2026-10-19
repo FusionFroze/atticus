@@ -76,6 +76,61 @@ describe("worker", () => {
     }
   });
 
+  it("names each required var when it is removed, and echoes no secret", async () => {
+    const tokenMarker = "BOT_TOKEN_MARKER_k4W";
+    const keyMarker = "KEYMATERIALMARKERp8R";
+    const required = [
+      "APPS",
+      "GOOGLE_SERVICE_ACCOUNT_JSON",
+      "DISCORD_BOT_TOKEN",
+      "DISCORD_APPLICATION_ID",
+      "DISCORD_PUBLIC_KEY",
+      "DISCORD_CHANNEL_ID",
+      "ALLOWED_USER_IDS",
+    ];
+    const previous = globalThis.fetch;
+    let fetches = 0;
+    globalThis.fetch = (async () => {
+      fetches += 1;
+      return new Response("nope");
+    }) as typeof fetch;
+    try {
+      for (const name of required) {
+        const { lines, restore } = captureLog();
+        try {
+          const env = validEnv();
+          env.DISCORD_BOT_TOKEN = tokenMarker;
+          env.GOOGLE_SERVICE_ACCOUNT_JSON = JSON.stringify({
+            client_email: "atticus@example.iam.gserviceaccount.com",
+            private_key: `-----BEGIN PRIVATE KEY-----\n${keyMarker}\n-----END PRIVATE KEY-----\n`,
+          });
+          delete env[name];
+          await worker.scheduled(
+            createScheduledController(),
+            env as Env,
+            createExecutionContext(),
+          );
+        } finally {
+          restore();
+        }
+        expect(lines, name).toHaveLength(1);
+        const event = JSON.parse(lines[0] ?? "{}") as {
+          event?: string;
+          errors?: string[];
+        };
+        expect(event.event, name).toBe("config_invalid");
+        expect(event.errors, name).toHaveLength(1);
+        expect(event.errors?.[0], name).toContain(`\`${name}\``);
+        const text = lines.join("\n");
+        expect(text, name).not.toContain(tokenMarker);
+        expect(text, name).not.toContain(keyMarker);
+      }
+      expect(fetches).toBe(0);
+    } finally {
+      globalThis.fetch = previous;
+    }
+  });
+
   it("names a bad service-account field and does not echo the key", async () => {
     const marker = "UNIQUE_KEY_MATERIAL_z9Q";
     const { lines, restore } = captureLog();

@@ -1,54 +1,29 @@
-# Copy to .dev.vars. That file is gitignored. Placeholders only; never a real key.
-# Local secrets live here. Deployed secrets are set with `wrangler secret put`
-# (add `--env dev` for the dev Worker). Other vars also live in wrangler.jsonc.
-# A value here overrides the wrangler.jsonc var for `wrangler dev`.
+# Only for running Atticus locally with `npm run dev`. A deployed Worker never reads
+# this file: deployed secrets go in with `npx wrangler secret put` (README → Deploy).
+# Copy this file to .dev.vars, which is gitignored. Never commit a real key.
+# A value here overrides the matching var in wrangler.jsonc, for `npm run dev` only.
 
-# Google Cloud → service account → Keys → JSON. The full file, on one line.
+# The whole Google service-account JSON key, on one line.
 # Only client_email and private_key are read.
 GOOGLE_SERVICE_ACCOUNT_JSON={"type":"service_account","client_email":"name@project.iam.gserviceaccount.com","private_key":"-----BEGIN PRIVATE KEY-----\nreplace-me\n-----END PRIVATE KEY-----\n"}
 
-# Discord application → Bot → Token. Any non-empty placeholder works until v1-3.
+# Discord application → Bot → Token.
 DISCORD_BOT_TOKEN=replace-me
 
-# Per-app list. Already set in wrangler.jsonc; uncomment only to override it locally.
-# store is "play". id is the package name. name is shown in messages.
-# consoleUrl is an optional https link to that app in Play Console.
+# Everything below is optional here: wrangler.jsonc already sets these vars.
+# Uncomment a line to use a different value locally, for example a test channel.
+# Warning: with a real bot token and a real channel id, `npm run dev` posts to that channel.
+
 # APPS=[{"store":"play","id":"com.example.app","name":"Example"}]
-
-# Discord application id. A snowflake: 17-20 digits.
-DISCORD_APPLICATION_ID=100000000000000000
-
-# Discord application → General Information → Public Key. 64 hex characters.
-DISCORD_PUBLIC_KEY=0000000000000000000000000000000000000000000000000000000000000000
-
-# The channel Atticus posts to. A snowflake.
-DISCORD_CHANNEL_ID=200000000000000000
-
-# Comma-separated Discord user ids allowed to reply. Empty is a config error.
-ALLOWED_USER_IDS=300000000000000000
-
-# Everything below is optional. Uncomment a line to set it.
-
-# A language code such as en or en_GB. Unset means no translation.
+# DISCORD_APPLICATION_ID=
+# DISCORD_PUBLIC_KEY=
+# DISCORD_CHANNEL_ID=
+# ALLOWED_USER_IDS=
 # TRANSLATION_LANGUAGE=en
-
-# post (default) or silent.
 # BACKFILL=post
-
-# A user id, or &roleId, mentioned on 1-2 star reviews. Unset means nobody.
 # PING_ON_LOW_RATING=&400000000000000000
-
-# IANA name. Default UTC. wrangler.jsonc sets Asia/Kolkata.
-# TIMEZONE=Asia/Kolkata
-
-# true or false. Default true.
+# TIMEZONE=UTC
 # DIGEST_ENABLED=true
-
-# mon, tue, wed, thu, fri, sat or sun. Default mon.
 # DIGEST_DAY=mon
-
-# Integer 0 through 23, in TIMEZONE. Default 9.
 # DIGEST_HOUR=9
-
-# true or false. The dev Worker sets true. Default false.
-# DRY_RUN=false
+# DRY_RUN=true

@@ -11,16 +11,17 @@ import type {
 import {
   claimPending,
   DISCORD_GUILD_KEY,
-  getState,
   markOutboxFailed,
   markOutboxRetry,
   markOutboxSent,
   type OutboxRow,
+  readAllState,
   setState,
 } from "../store";
 import { postStoredReview } from "./deliver";
 import { loadDigest } from "./digest";
 import { clearDiscordChannel, raiseDiscordChannel } from "./health";
+import { createRunState, type RunState } from "./run-state";
 
 const SEND_KINDS = [
   "review_new",
@@ -44,18 +45,33 @@ type StopWhy =
 
 type Step = "sent" | "next" | StopWhy;
 
+type SendInput = {
+  db: D1Database;
+  config: Config;
+  notifier: Notifier;
+  state: RunState;
+};
+
+// state is the run's state from poll. Without it, the sender reads the rows once.
 export async function send(input: {
   db: D1Database;
   config: Config;
   notifier: Notifier;
   budget: Budget;
   nowMs: number;
+  state?: RunState;
   markSent?: typeof markOutboxSent;
 }): Promise<{ sent: number }> {
   const markSent = input.markSent ?? markOutboxSent;
   const nowSeconds = Math.floor(input.nowMs / 1000);
   let sent = 0;
   try {
+    const run: SendInput = {
+      db: input.db,
+      config: input.config,
+      notifier: input.notifier,
+      state: input.state ?? createRunState(await readAllState(input.db)),
+    };
     for (;;) {
       const why = halt(input.budget);
       if (why !== null) {
@@ -75,7 +91,7 @@ export async function send(input: {
           noteStop(stopped);
           return { sent };
         }
-        const step = await deliver(input, row, nowSeconds, markSent);
+        const step = await deliver(run, row, nowSeconds, markSent);
         if (step === "sent") {
           sent += 1;
           continue;
@@ -103,11 +119,7 @@ function noteStop(why: StopWhy): void {
 }
 
 async function deliver(
-  input: {
-    db: D1Database;
-    config: Config;
-    notifier: Notifier;
-  },
+  input: SendInput,
   row: OutboxRow,
   nowSeconds: number,
   markSent: typeof markOutboxSent,
@@ -126,7 +138,7 @@ async function deliver(
 }
 
 async function deliverDigest(
-  input: { db: D1Database; config: Config; notifier: Notifier },
+  input: SendInput,
   row: OutboxRow,
   nowSeconds: number,
   markSent: typeof markOutboxSent,
@@ -135,7 +147,7 @@ async function deliverDigest(
     db: input.db,
     config: input.config,
     payload: row.payload,
-    guildId: await getState(input.db, DISCORD_GUILD_KEY),
+    guildId: input.state.get(DISCORD_GUILD_KEY),
   });
   if (digest === null) {
     await failRow(input.db, row, "payload invalid");
@@ -143,14 +155,14 @@ async function deliverDigest(
   }
   const result = await input.notifier.postDigest(digest, `o${row.id}`);
   if (!result.ok) {
-    return applyFailure(input.db, row, result.failure, nowSeconds);
+    return applyFailure(input, row, result.failure, nowSeconds);
   }
-  await finishSent(input.db, row, result, 0, nowSeconds, markSent);
+  await finishSent(input, row, result, 0, nowSeconds, markSent);
   return "sent";
 }
 
 async function deliverNotice(
-  input: { db: D1Database; config: Config; notifier: Notifier },
+  input: SendInput,
   row: OutboxRow,
   nowSeconds: number,
   markSent: typeof markOutboxSent,
@@ -161,14 +173,13 @@ async function deliverNotice(
     return "next";
   }
   const result = await input.notifier.postNotice(notice, `o${row.id}`);
-  if (!result.ok)
-    return applyFailure(input.db, row, result.failure, nowSeconds);
-  await finishSent(input.db, row, result, 0, nowSeconds, markSent);
+  if (!result.ok) return applyFailure(input, row, result.failure, nowSeconds);
+  await finishSent(input, row, result, 0, nowSeconds, markSent);
   return "sent";
 }
 
 async function deliverReview(
-  input: { db: D1Database; config: Config; notifier: Notifier },
+  input: SendInput,
   row: OutboxRow,
   nowSeconds: number,
   markSent: typeof markOutboxSent,
@@ -184,10 +195,10 @@ async function deliverReview(
     return "next";
   }
   if (!posted.result.ok) {
-    return applyFailure(input.db, row, posted.result.failure, nowSeconds);
+    return applyFailure(input, row, posted.result.failure, nowSeconds);
   }
   await finishSent(
-    input.db,
+    input,
     row,
     posted.result,
     posted.modifiedAt,
@@ -271,15 +282,16 @@ function connectedNotice(
 }
 
 async function applyFailure(
-  db: D1Database,
+  input: SendInput,
   row: OutboxRow,
   failure: SendFailure,
   nowSeconds: number,
 ): Promise<Step> {
+  const db = input.db;
   if (failure.kind === "rate_limited") return "rate_limited";
   if (failure.kind === "budget") return "budget";
   if (failure.kind === "channel") {
-    await raiseDiscordChannel(db, nowSeconds);
+    await raiseDiscordChannel(db, input.state, nowSeconds);
     return "channel";
   }
   if (failure.kind === "unavailable" && failure.status === 401) {
@@ -299,14 +311,16 @@ function failureLabel(failure: SendFailure): string {
   return failure.kind;
 }
 
+// The guild id is written only when it changes. Both flags come from the run's state.
 async function finishSent(
-  db: D1Database,
+  input: SendInput,
   row: OutboxRow,
   result: Extract<SendResult, { ok: true }>,
   version: number,
   nowSeconds: number,
   markSent: typeof markOutboxSent,
 ): Promise<void> {
+  const db = input.db;
   await markSent(db, {
     outboxId: row.id,
     reviewPk: row.reviewPk,
@@ -315,10 +329,12 @@ async function finishSent(
     version,
     nowSeconds,
   });
-  if (result.ref.guildId !== undefined) {
-    await setState(db, DISCORD_GUILD_KEY, result.ref.guildId, nowSeconds);
+  const guildId = result.ref.guildId;
+  if (guildId !== undefined && guildId !== input.state.get(DISCORD_GUILD_KEY)) {
+    await setState(db, DISCORD_GUILD_KEY, guildId, nowSeconds);
+    input.state.set(DISCORD_GUILD_KEY, guildId);
   }
-  await clearDiscordChannel(db);
+  await clearDiscordChannel(db, input.state);
   log("outbox_sent", { outboxId: row.id, kind: row.kind });
 }
 

@@ -11,7 +11,7 @@ import {
   getState,
   readReviews,
   setState,
-  takeLease,
+  startRun,
 } from "../src/store";
 import malformed from "./fixtures/play/malformed.json";
 
@@ -541,7 +541,7 @@ describe("poll", () => {
   });
 
   it("logs run_skipped_locked and skips Google when the lease is held", async () => {
-    expect(await takeLease(env.DB, NOW, "held-before")).toBe(true);
+    expect(await startRun(env.DB, NOW, "held-before")).not.toBeNull();
     const { lines, calls } = await withGoogle(
       pageOf(() => twoReviews()),
       () => pollOnce("post"),

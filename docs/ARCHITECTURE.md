@@ -111,11 +111,11 @@ The Workers free plan is the hardest constraint. Re-verify at https://developers
 | Resource | Limit | How Atticus stays inside it |
 | --- | --- | --- |
 | External subrequests per invocation | 50 | One `Budget` per invocation, capped at 45. Every Google and Discord call takes from it. The outbox carries the rest to the next run. |
-| CPU per invocation | 10 ms | No runtime dependencies, native WebCrypto, the Google token cached in memory, pages of at most 100 reviews, rendering kept simple. Measured with `wrangler tail`. |
+| CPU per invocation | 10 ms | No runtime dependencies, native WebCrypto, pages of at most 100 reviews, rendering kept simple, few D1 round trips. Measured with `wrangler tail` in v1-7: every cron runs in a fresh isolate, so the in-memory token cache never helps a cron. A quiet cron is 9–15 ms (median 12), and each message sent adds about 3.4 ms. Signing and `Intl` are each about 1 ms or less; the rest is fixed cold-start cost. Every outcome was `ok`, with no CPU stops. Accepted by the owner on 2026-10-19; watch "Exceeded CPU Time Limits" on the dashboard. |
 | Cron triggers per account | 5 | One. The digest is a time check inside it. |
 | Cron wall time | 15 min | The sender stops after 60 s; the lease lasts 10 min. |
 | `waitUntil` after responding | 30 s | The reply flow makes three calls at most (token, reply, message edit). |
-| D1 | generous | Batched writes; old outbox rows are pruned after 30 days. |
+| D1 | 1,000 requests to Cloudflare services per invocation | One batch starts a run (the lease and every `state` row), one batch ends it. Each message sent costs two requests. A quiet run is 4. A 30-message run passed live in v1-7, so the D1 page's 50 per invocation does not apply. Old outbox rows are pruned after 30 days. |
 
 ---
 
