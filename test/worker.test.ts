@@ -151,6 +151,8 @@ describe("worker", () => {
       ]);
       const env = validEnv();
       env.DB = testEnv.DB;
+      // The digest follows the weekday. This test only checks review logs.
+      env.DIGEST_ENABLED = "false";
       env.GOOGLE_SERVICE_ACCOUNT_JSON = JSON.stringify({
         client_email: "atticus@example.iam.gserviceaccount.com",
         private_key: pem,

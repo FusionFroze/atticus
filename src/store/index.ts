@@ -1,3 +1,10 @@
+export type { DigestReviewRow } from "./digest";
+export {
+  DIGEST_LAST_KEY,
+  DISCORD_GUILD_KEY,
+  enqueueDigestBatch,
+  readDigestRows,
+} from "./digest";
 export { appSeenKey, writeFirstRun } from "./first-run";
 export { readLatestMessage } from "./messages";
 export type { OutboxRow } from "./outbox";

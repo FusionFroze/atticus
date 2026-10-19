@@ -78,13 +78,29 @@ export async function pollApps(
   apps: AppConfig[] = [lune],
   backfill: "post" | "silent" = "post",
 ): Promise<void> {
+  await pollAt({ apps, backfill });
+}
+
+export async function pollAt(
+  input: {
+    apps?: AppConfig[];
+    backfill?: "post" | "silent";
+    nowMs?: number;
+    timezone?: string;
+    digest?: Config["digest"];
+  } = {},
+): Promise<void> {
+  const nowMs = input.nowMs ?? NOW_MS;
   const google = { clientEmail: EMAIL, privateKeyPem: await testPem() };
+  const config = cronConfig(input.apps ?? [lune], input.backfill ?? "post");
+  if (input.timezone !== undefined) config.timezone = input.timezone;
+  if (input.digest !== undefined) config.digest = input.digest;
   await poll({
     db: env.DB,
-    config: cronConfig(apps, backfill),
+    config,
     source: createPlaySource({ google, translationLanguage: null }),
-    budget: createBudget(NOW_MS),
-    nowMs: NOW_MS,
+    budget: createBudget(nowMs),
+    nowMs,
   });
 }
 

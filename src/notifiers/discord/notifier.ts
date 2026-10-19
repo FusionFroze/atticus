@@ -1,5 +1,5 @@
 import { log } from "../../lib/log";
-import type { MessageRef, Notifier } from "../types";
+import type { DigestInput, MessageRef, Notifier, SendFailure } from "../types";
 import type { DiscordClient } from "./client";
 import { supersededLine } from "./copy";
 import { COMPONENTS_V2 } from "./parts";
@@ -43,14 +43,40 @@ export function createDiscordNotifier(input: {
         nonce,
       );
     },
-    postDigest(digest, nonce) {
+    async postDigest(digest, nonce) {
+      const resolved = await withGuild(input.client, input.channelId, digest);
+      if (!resolved.ok) return resolved;
       return input.client.createMessage(
         input.channelId,
-        renderDigest(digest),
+        renderDigest(resolved.digest),
         nonce,
       );
     },
   };
+}
+
+async function withGuild(
+  client: DiscordClient,
+  channelId: string,
+  digest: DigestInput,
+): Promise<
+  { ok: true; digest: DigestInput } | { ok: false; failure: SendFailure }
+> {
+  if (digest.guildId !== null || !needsGuild(digest)) {
+    return { ok: true, digest };
+  }
+  const looked = await client.getChannelGuild(channelId);
+  if (!looked.ok) return looked;
+  return { ok: true, digest: { ...digest, guildId: looked.guildId } };
+}
+
+function needsGuild(digest: DigestInput): boolean {
+  return digest.lowest.some(
+    (review) =>
+      review.channelId !== null &&
+      review.messageId !== null &&
+      (review.title?.trim() ?? "") !== "",
+  );
 }
 
 function pointer(ref: MessageRef, channelId: string): string {

@@ -17,6 +17,7 @@ import {
   updateReview,
   writeFirstRun,
 } from "../store";
+import { enqueueDueDigests } from "./digest";
 import { noteListFailure, noteListSuccess, noteRemovedApps } from "./health";
 
 const LAST_POLL_AT = "last_poll_at";
@@ -63,6 +64,11 @@ export async function poll(input: {
       const stop = await pollApp(input, app, nowSeconds, counts);
       if (stop) break;
     }
+    await enqueueDueDigests({
+      db: input.db,
+      config: input.config,
+      nowMs: input.nowMs,
+    });
     const sent =
       input.afterApps === undefined ? 0 : (await input.afterApps()).sent;
     await setState(input.db, LAST_POLL_AT, String(nowSeconds), nowSeconds);

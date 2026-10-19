@@ -6,11 +6,12 @@ import type { DiscordMessageBody } from "../src/notifiers/discord/client";
 import { createDiscordClient } from "../src/notifiers/discord/client";
 import { truncate } from "../src/notifiers/discord/parts";
 import {
+  renderDigest,
   renderNotice,
   renderRepliedMessage,
   renderReview,
 } from "../src/notifiers/discord/render";
-import type { ReviewMessageInput } from "../src/notifiers/types";
+import type { DigestInput, ReviewMessageInput } from "../src/notifiers/types";
 
 const USER = "423456789012345678";
 const ROLE = "523456789012345678";
@@ -369,6 +370,129 @@ describe("allowed mentions on the wire", () => {
     expect(JSON.stringify(sent)).not.toContain('"embeds"');
   });
 });
+
+describe("renderDigest", () => {
+  it("posts the quiet line and the written-reviews label", () => {
+    const body = renderDigest(
+      digest({ quiet: true, newCount: 0, editedCount: 0 }),
+    );
+    const joined = texts(body).join("\n");
+    expect(joined).toContain("Weekly reviews · **Lune**");
+    expect(joined).toContain(
+      "Written reviews only. Your store rating also counts star-only ratings, which Google's API doesn't share.",
+    );
+    expect(joined).toContain("No written reviews this week.");
+    expect(body.flags).toBe(32768);
+    expect(colorOf(body)).toBeUndefined();
+  });
+
+  it("formats the average, a drop, the distribution, and the reply line", () => {
+    const joined = texts(
+      renderDigest(
+        digest({
+          newCount: 5,
+          editedCount: 1,
+          averageRating: 4.2,
+          averageChange: -0.4,
+          distribution: [1, 0, 1, 1, 2],
+          repliedCount: 2,
+          replyRate: 0.4,
+          medianReplySeconds: 3 * 3600 + 10 * 60,
+          versions: [
+            { name: "1.4.2", count: 3 },
+            { name: "Unknown", count: 2 },
+          ],
+          lowest: [
+            {
+              rating: 1,
+              title: "Crashed",
+              channelId: "223456789012345678",
+              messageId: "888888888888888888",
+            },
+          ],
+          guildId: "623456789012345678",
+        }),
+      ),
+    ).join("\n");
+    expect(joined).toContain("**5** new · **1** edited");
+    expect(joined).toContain("Average **4.2** · \u22120.4 vs last week");
+    expect(joined).toContain(
+      ["★★★★★  2", "★★★★☆  1", "★★★☆☆  1", "★★☆☆☆  0", "★☆☆☆☆  1"].join("\n"),
+    );
+    expect(joined).toContain("Replied **2/5** · 40% · median **3h 10m**");
+    expect(joined).toContain("**By version**");
+    expect(joined).toContain("1.4.2 · 3");
+    expect(joined).toContain(
+      "★1 · [Crashed](https://discord.com/channels/623456789012345678/223456789012345678/888888888888888888)",
+    );
+  });
+
+  it("omits the delta without a previous week and shortens durations", () => {
+    const joined = texts(
+      renderDigest(
+        digest({
+          averageRating: 5,
+          averageChange: null,
+          medianReplySeconds: 45,
+          repliedCount: 1,
+          replyRate: 1,
+          newCount: 1,
+        }),
+      ),
+    ).join("\n");
+    expect(joined).toContain("Average **5.0**");
+    expect(joined).not.toContain("vs last week");
+    expect(joined).toContain("median **45s**");
+
+    const longer = texts(
+      renderDigest(digest({ medianReplySeconds: 2 * 86400 + 4 * 3600 })),
+    ).join("\n");
+    expect(longer).toContain("median **2d 4h**");
+    const minutes = texts(
+      renderDigest(digest({ medianReplySeconds: 90 })),
+    ).join("\n");
+    expect(minutes).toContain("median **2m**");
+  });
+
+  it("shows stars only when the review has no link", () => {
+    const joined = texts(
+      renderDigest(
+        digest({
+          lowest: [
+            {
+              rating: 2,
+              title: "No link",
+              channelId: null,
+              messageId: null,
+            },
+          ],
+          guildId: null,
+        }),
+      ),
+    ).join("\n");
+    expect(joined).toContain("★2");
+    expect(joined).not.toContain("No link");
+  });
+});
+
+function digest(overrides: Partial<DigestInput> = {}): DigestInput {
+  return {
+    appName: "Lune",
+    quiet: false,
+    newCount: 1,
+    editedCount: 0,
+    averageRating: 5,
+    averageChange: null,
+    distribution: [0, 0, 0, 0, 1],
+    repliedCount: 1,
+    replyRate: 1,
+    medianReplySeconds: 45,
+    versions: [],
+    lowest: [],
+    guildId: null,
+    ...overrides,
+  };
+}
 
 function notice(count: number, backfill: "post" | "silent"): string {
   return texts(

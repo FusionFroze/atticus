@@ -10,12 +10,16 @@ import type {
 } from "../notifiers/types";
 import {
   claimPending,
+  DISCORD_GUILD_KEY,
+  getState,
   markOutboxFailed,
   markOutboxRetry,
   markOutboxSent,
   type OutboxRow,
+  setState,
 } from "../store";
 import { postStoredReview } from "./deliver";
+import { loadDigest } from "./digest";
 import { clearDiscordChannel, raiseDiscordChannel } from "./health";
 
 const SEND_KINDS = [
@@ -25,6 +29,7 @@ const SEND_KINDS = [
   "connected",
   "warning",
   "recovered",
+  "digest",
 ] as const;
 
 // attempts is 0 before the first failure. The fifth failure has no further delay.
@@ -107,6 +112,9 @@ async function deliver(
   nowSeconds: number,
   markSent: typeof markOutboxSent,
 ): Promise<Step> {
+  if (row.kind === "digest") {
+    return deliverDigest(input, row, nowSeconds, markSent);
+  }
   if (
     row.kind === "connected" ||
     row.kind === "warning" ||
@@ -115,6 +123,30 @@ async function deliver(
     return deliverNotice(input, row, nowSeconds, markSent);
   }
   return deliverReview(input, row, nowSeconds, markSent);
+}
+
+async function deliverDigest(
+  input: { db: D1Database; config: Config; notifier: Notifier },
+  row: OutboxRow,
+  nowSeconds: number,
+  markSent: typeof markOutboxSent,
+): Promise<Step> {
+  const digest = await loadDigest({
+    db: input.db,
+    config: input.config,
+    payload: row.payload,
+    guildId: await getState(input.db, DISCORD_GUILD_KEY),
+  });
+  if (digest === null) {
+    await failRow(input.db, row, "payload invalid");
+    return "next";
+  }
+  const result = await input.notifier.postDigest(digest, `o${row.id}`);
+  if (!result.ok) {
+    return applyFailure(input.db, row, result.failure, nowSeconds);
+  }
+  await finishSent(input.db, row, result, 0, nowSeconds, markSent);
+  return "sent";
 }
 
 async function deliverNotice(
@@ -283,6 +315,9 @@ async function finishSent(
     version,
     nowSeconds,
   });
+  if (result.ref.guildId !== undefined) {
+    await setState(db, DISCORD_GUILD_KEY, result.ref.guildId, nowSeconds);
+  }
   await clearDiscordChannel(db);
   log("outbox_sent", { outboxId: row.id, kind: row.kind });
 }

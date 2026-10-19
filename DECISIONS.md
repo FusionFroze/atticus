@@ -49,3 +49,8 @@ The short, public list of how Atticus is built and why. Each line points to the 
 
 - **Warnings are posted once and cleared once** (V60), so a broken permission doesn't spam the channel every 15 minutes.
 - **Logs carry ids and statuses, never review text, names or secrets** (V62).
+
+## Digest
+
+- **One digest per app** (v1-6). Each app gets its own weekly message.
+- **A quiet week still posts** (v1-6). The message is one line, "No written reviews this week.", under the written-reviews label.

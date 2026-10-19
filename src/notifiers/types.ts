@@ -38,10 +38,28 @@ export type NoticeInput =
   | { kind: "recovered"; subject: "google_auth" }
   | { kind: "recovered"; subject: "play_forbidden"; appName: string };
 
-export type DigestInput = { appName: string; text: string };
+export type DigestInput = {
+  appName: string;
+  quiet: boolean;
+  newCount: number;
+  editedCount: number;
+  averageRating: number | null;
+  averageChange: number | null;
+  distribution: readonly [number, number, number, number, number];
+  repliedCount: number;
+  replyRate: number | null;
+  medianReplySeconds: number | null;
+  versions: readonly { name: string; count: number }[];
+  lowest: readonly {
+    rating: 1 | 2 | 3 | 4 | 5;
+    title: string | null;
+    channelId: string | null;
+    messageId: string | null;
+  }[];
+  guildId: string | null;
+};
 
 // One method per outbox kind. Rendering uses Review rows, never Play's raw JSON.
-// digest stays pending until v1-6.
 export interface Notifier {
   postReview(
     input: ReviewMessageInput,

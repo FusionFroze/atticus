@@ -26,7 +26,7 @@ type OutboxRecord = {
 const OUTBOX_KEEP_SECONDS = 30 * 24 * 60 * 60;
 
 // A read. The lease and the Discord nonce are the locks; this does not change status.
-// kinds, when passed, leaves anything else (digest, until v1-6) unclaimed.
+// kinds, when passed, claims only those kinds.
 export async function claimPending(
   db: D1Database,
   nowSeconds: number,

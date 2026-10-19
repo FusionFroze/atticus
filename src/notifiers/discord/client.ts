@@ -33,6 +33,10 @@ export type DiscordMessageRead =
   | { ok: true; components: unknown }
   | { ok: false; failure: SendFailure };
 
+export type GuildLookup =
+  | { ok: true; guildId: string | null }
+  | { ok: false; failure: SendFailure };
+
 export type DiscordClient = {
   createMessage(
     channelId: string,
@@ -41,6 +45,7 @@ export type DiscordClient = {
   ): Promise<SendResult>;
   editMessage(ref: MessageRef, body: DiscordMessageBody): Promise<SendResult>;
   getMessage(ref: MessageRef): Promise<DiscordMessageRead>;
+  getChannelGuild(channelId: string): Promise<GuildLookup>;
   editOriginal(
     applicationId: string,
     interactionToken: string,
@@ -101,6 +106,12 @@ export function createDiscordClient(input: {
       return readMessage({
         ...shared,
         url: `${DISCORD_API}/channels/${ref.channelId}/messages/${ref.messageId}`,
+      });
+    },
+    getChannelGuild(channelId) {
+      return readGuildId({
+        ...shared,
+        url: `${DISCORD_API}/channels/${channelId}`,
       });
     },
     editOriginal(applicationId, interactionToken, body) {
@@ -181,6 +192,44 @@ async function readAttempt(
     await response.body.cancel();
   }
   return { ok: false, failure: mapStatus(response.status, "GET", code) };
+}
+
+async function readGuildId(input: ReadInput): Promise<GuildLookup> {
+  if (!input.budget.take()) return { ok: false, failure: { kind: "budget" } };
+  let response: Response;
+  try {
+    response = await fetch(input.url, {
+      method: "GET",
+      headers: {
+        authorization: input.authorization,
+        "user-agent": USER_AGENT,
+      },
+    });
+  } catch {
+    return { ok: false, failure: { kind: "unavailable", status: 0 } };
+  }
+  if (response.status === 429) {
+    const retryAfterMs = await readRetryAfter(response);
+    return { ok: false, failure: { kind: "rate_limited", retryAfterMs } };
+  }
+  if (response.status >= 200 && response.status < 300) {
+    return { ok: true, guildId: await guildIdOf(response) };
+  }
+  const code = response.status === 404 ? await readErrorCode(response) : null;
+  if (response.body !== null && response.status !== 404) {
+    await response.body.cancel();
+  }
+  return { ok: false, failure: mapStatus(response.status, "GET", code) };
+}
+
+async function guildIdOf(response: Response): Promise<string | null> {
+  try {
+    const parsed: unknown = await response.json();
+    if (!isRecord(parsed) || typeof parsed.guild_id !== "string") return null;
+    return parsed.guild_id === "" ? null : parsed.guild_id;
+  } catch {
+    return null;
+  }
 }
 
 async function readComponentList(

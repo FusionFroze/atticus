@@ -75,6 +75,14 @@ export function playForbiddenRecovered(appName: string): string {
   return `✓ Back to normal: reading reviews for **${appName}** is working again.`;
 }
 
+export const DIGEST_LABEL =
+  "Written reviews only. Your store rating also counts star-only ratings, which Google's API doesn't share.";
+export const DIGEST_QUIET = "No written reviews this week.";
+
+export function digestTitle(appName: string): string {
+  return `Weekly reviews · **${appName}**`;
+}
+
 export function replyFailureText(kind: string): string {
   switch (kind) {
     case "invalid":
