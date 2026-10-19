@@ -36,6 +36,18 @@ export async function readReviews(
   return found;
 }
 
+export async function readReview(
+  db: D1Database,
+  id: number,
+): Promise<StoredReview | null> {
+  const row = await db
+    .prepare(`SELECT ${REVIEW_COLUMNS} FROM reviews WHERE id = ?`)
+    .bind(id)
+    .first<ReviewRow>();
+  if (row === null) return null;
+  return mapReview(row);
+}
+
 // The review insert and its outbox row are one batch. last_insert_rowid() reads the
 // review id from that same transaction. enqueue false stores the row only.
 export async function insertReviewWithOutbox(

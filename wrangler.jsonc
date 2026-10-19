@@ -40,12 +40,17 @@
       ],
       "vars": {
         "APPS": [
-          { "store": "play", "id": "com.fusionfroze.Lune", "name": "Lune" }
+          {
+            "store": "play",
+            "id": "com.fusionfroze.Lune",
+            "name": "Lune",
+            "consoleUrl": "https://play.google.com/console/u/0/developers/7040399675484853745/app/4973690844678006441/user-feedback/reviews"
+          }
         ],
-        "DISCORD_APPLICATION_ID": "100000000000000000",
-        "DISCORD_PUBLIC_KEY": "0000000000000000000000000000000000000000000000000000000000000000",
-        "DISCORD_CHANNEL_ID": "200000000000000000",
-        "ALLOWED_USER_IDS": "300000000000000000",
+        "DISCORD_APPLICATION_ID": "1561570492916301894",
+        "DISCORD_PUBLIC_KEY": "0da3a5d985950d0c09e64c11fc740625734f0e558dcf8164f61b07d28f1d4fd8",
+        "DISCORD_CHANNEL_ID": "1561569716714209422",
+        "ALLOWED_USER_IDS": "1097036371643867146",
         "TIMEZONE": "Asia/Kolkata",
         "DRY_RUN": true
       }

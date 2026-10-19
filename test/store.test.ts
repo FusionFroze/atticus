@@ -10,6 +10,8 @@ import {
   markOutboxRetry,
   markOutboxSent,
   pruneOutbox,
+  readLatestMessage,
+  readReview,
   readReviews,
   releaseLease,
   setState,
@@ -463,6 +465,50 @@ describe("claimPending", () => {
     const due = await claimPending(env.DB, NOW, 10);
     expect(due.map((row) => row.sortKey)).toEqual([0, 100, 200, 200]);
     expect(await claimPending(env.DB, NOW, 2)).toHaveLength(2);
+
+    expect(
+      (await claimPending(env.DB, NOW, 10, ["connected"])).map(
+        (row) => row.kind,
+      ),
+    ).toEqual(["connected"]);
+    expect(await claimPending(env.DB, NOW, 10, ["digest"])).toEqual([]);
+    expect(await claimPending(env.DB, NOW, 10, [])).toEqual([]);
+  });
+});
+
+describe("readReview", () => {
+  it("returns the stored row and its latest message", async () => {
+    const stored = await save(review());
+    expect(await readReview(env.DB, stored.id)).toMatchObject({
+      id: stored.id,
+      reviewId: "review-1",
+      body: "Stored body",
+    });
+    expect(await readReview(env.DB, stored.id + 1)).toBeNull();
+    expect(await readLatestMessage(env.DB, stored.id)).toBeNull();
+
+    const pending = (await outbox()).find((row) => row.kind === "review_new");
+    if (pending === undefined) throw new Error("missing review_new");
+    await markOutboxSent(env.DB, {
+      outboxId: pending.id,
+      reviewPk: stored.id,
+      channelId: "channel-1",
+      messageId: "message-1",
+      version: stored.modifiedAt,
+      nowSeconds: NOW,
+    });
+    await markOutboxSent(env.DB, {
+      outboxId: pending.id,
+      reviewPk: stored.id,
+      channelId: "channel-1",
+      messageId: "message-2",
+      version: stored.modifiedAt,
+      nowSeconds: NOW + 1,
+    });
+    expect(await readLatestMessage(env.DB, stored.id)).toEqual({
+      channelId: "channel-1",
+      messageId: "message-2",
+    });
   });
 });
 

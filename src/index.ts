@@ -1,8 +1,11 @@
 import { parseConfig } from "./config/parse";
 import type { Env } from "./env";
 import { poll } from "./jobs/poll";
+import { send } from "./jobs/send";
 import { createBudget } from "./lib/budget";
 import { log } from "./lib/log";
+import { createDiscordClient } from "./notifiers/discord/client";
+import { createDiscordNotifier } from "./notifiers/discord/notifier";
 import { createPlaySource } from "./sources/play/source";
 
 export default {
@@ -14,15 +17,25 @@ export default {
     }
 
     const nowMs = Date.now();
+    const budget = createBudget(nowMs);
+    const config = parsed.config;
+    const notifier = createDiscordNotifier({
+      client: createDiscordClient({
+        botToken: config.discord.botToken,
+        budget,
+      }),
+      channelId: config.discord.channelId,
+    });
     await poll({
       db: env.DB,
-      config: parsed.config,
+      config,
       source: createPlaySource({
-        google: parsed.config.google,
-        translationLanguage: parsed.config.translationLanguage,
+        google: config.google,
+        translationLanguage: config.translationLanguage,
       }),
-      budget: createBudget(nowMs),
+      budget,
       nowMs,
+      afterApps: () => send({ db: env.DB, config, notifier, budget, nowMs }),
     });
   },
 

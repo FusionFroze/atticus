@@ -93,19 +93,25 @@ describe("worker", () => {
     const pem = await generatePem();
     const { lines, restore } = captureLog();
     let tokenCalls = 0;
+    let discordCalls = 0;
     const previous = globalThis.fetch;
     globalThis.fetch = (async (
       input: RequestInfo | URL,
       init?: RequestInit,
     ) => {
       const request = new Request(input, init);
-      if (new URL(request.url).origin === "https://oauth2.googleapis.com") {
+      const origin = new URL(request.url).origin;
+      if (origin === "https://oauth2.googleapis.com") {
         tokenCalls += 1;
         return Response.json({
           access_token: "ya29.TEST_TOKEN_SHOULD_NOT_LOG",
           expires_in: 3600,
           token_type: "Bearer",
         });
+      }
+      if (origin === "https://discord.com") {
+        discordCalls += 1;
+        return Response.json({ id: String(discordCalls) });
       }
       return Response.json({
         reviews: [
@@ -144,6 +150,11 @@ describe("worker", () => {
       await worker.scheduled(createScheduledController(), env as Env, ctx);
 
       expect(tokenCalls).toBe(1);
+      expect(discordCalls).toBe(2);
+      const sent = await testEnv.DB.prepare(
+        "SELECT COUNT(*) AS n FROM outbox WHERE status = 'sent'",
+      ).first<{ n: number }>();
+      expect(sent).toEqual({ n: 2 });
       const text = lines.join("\n");
       expect(text).not.toContain("Should Not Log Author");
       expect(text).not.toContain("Should Not Log Body");

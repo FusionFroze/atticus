@@ -1,4 +1,5 @@
 export { appSeenKey, writeFirstRun } from "./first-run";
+export { readLatestMessage } from "./messages";
 export type { OutboxRow } from "./outbox";
 export {
   claimPending,
@@ -7,7 +8,7 @@ export {
   markOutboxSent,
   pruneOutbox,
 } from "./outbox";
-export { insertReviewWithOutbox, readReviews } from "./reviews";
+export { insertReviewWithOutbox, readReview, readReviews } from "./reviews";
 export { getState, releaseLease, setState, takeLease } from "./state";
 export type { ReviewUpdateOutcome } from "./update";
 export { updateReview } from "./update";

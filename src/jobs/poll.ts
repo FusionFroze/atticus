@@ -29,14 +29,16 @@ type RunCounts = {
   replyRemoved: number;
 };
 
-// Under the lease: list, diff, write. First successful list sets app_seen, even when
-// truncated. A failed list does not. Warnings wait for v1-5; this run only logs.
+// Under the lease: list, diff, write, then the sender. First successful list sets
+// app_seen, even when truncated. A failed list does not. Warnings wait for v1-5;
+// this run only logs.
 export async function poll(input: {
   db: D1Database;
   config: Config;
   source: ReviewSource;
   budget: Budget;
   nowMs: number;
+  afterApps?: () => Promise<{ sent: number }>;
 }): Promise<void> {
   const nowSeconds = Math.floor(input.nowMs / 1000);
   const holder = crypto.randomUUID();
@@ -60,6 +62,8 @@ export async function poll(input: {
       const stop = await pollApp(input, app, nowSeconds, counts);
       if (stop) break;
     }
+    const sent =
+      input.afterApps === undefined ? 0 : (await input.afterApps()).sent;
     await setState(input.db, LAST_POLL_AT, String(nowSeconds), nowSeconds);
     await pruneOutbox(input.db, nowSeconds);
     log("run_end", {
@@ -70,6 +74,7 @@ export async function poll(input: {
       reviewEdited: counts.reviewEdited,
       replyExternal: counts.replyExternal,
       replyRemoved: counts.replyRemoved,
+      sent,
     });
   } finally {
     await releaseLease(input.db, holder);

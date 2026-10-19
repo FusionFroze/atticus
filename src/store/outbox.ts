@@ -26,20 +26,27 @@ type OutboxRecord = {
 const OUTBOX_KEEP_SECONDS = 30 * 24 * 60 * 60;
 
 // A read. The lease and the Discord nonce are the locks; this does not change status.
+// kinds, when passed, leaves deferred rows (warning, recovered, digest) unclaimed.
 export async function claimPending(
   db: D1Database,
   nowSeconds: number,
   limit: number,
+  kinds?: readonly string[],
 ): Promise<OutboxRow[]> {
+  if (kinds !== undefined && kinds.length === 0) return [];
+  const kindFilter =
+    kinds === undefined
+      ? ""
+      : ` AND kind IN (${kinds.map(() => "?").join(", ")})`;
   const rows = await db
     .prepare(
       `SELECT id, kind, review_pk, payload, status, sort_key, attempts, next_attempt_at, created_at
        FROM outbox
-       WHERE status = 'pending' AND next_attempt_at <= ?
+       WHERE status = 'pending' AND next_attempt_at <= ?${kindFilter}
        ORDER BY sort_key, id
        LIMIT ?`,
     )
-    .bind(nowSeconds, limit)
+    .bind(nowSeconds, ...(kinds ?? []), limit)
     .all<OutboxRecord>();
   return rows.results.map((row) => ({
     id: row.id,

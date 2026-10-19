@@ -21,6 +21,7 @@
     "@biomejs/biome": "^2.5.15",
     "@cloudflare/vitest-plugin": "^1.4.4",
     "@cloudflare/workers-types": "^5.20261018.1",
+    "discord-api-types": "^0.38.56",
     "typescript": "^7.0.2",
     "vitest": "^5.0.5",
     "wrangler": "^4.151.1"

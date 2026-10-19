@@ -36,6 +36,7 @@ The short, public list of how Atticus is built and why. Each line points to the 
 - **The message look is chosen on real messages, not on paper** (V41).
 - **Only a review's latest message has buttons** (V42).
 - **Nothing in a review can ping anyone** (V43): every message sets `allowed_mentions`.
+- **The review message is a Components V2 container** (V41). Locked 2026-10-19 in the test channel. The low-rating mention sits in a Text Display, because a V2 message cannot include `content`.
 
 ## Replies
 
