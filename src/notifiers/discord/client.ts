@@ -35,6 +35,16 @@ export type DiscordClient = {
     nonce: string,
   ): Promise<SendResult>;
   editMessage(ref: MessageRef, body: DiscordMessageBody): Promise<SendResult>;
+  editOriginal(
+    applicationId: string,
+    interactionToken: string,
+    body: DiscordMessageBody,
+  ): Promise<SendResult>;
+  createFollowUp(
+    applicationId: string,
+    interactionToken: string,
+    content: string,
+  ): Promise<SendResult>;
 };
 
 type CallInput = {
@@ -43,7 +53,7 @@ type CallInput = {
   channelId: string;
   body: DiscordMessageBody;
   nonce: string | null;
-  token: string;
+  authorization: string | null;
   budget: Budget;
   sleep: (ms: number) => Promise<void>;
 };
@@ -55,7 +65,7 @@ export function createDiscordClient(input: {
 }): DiscordClient {
   const wait = input.sleep ?? ((ms: number) => scheduler.wait(ms));
   const shared = {
-    token: input.botToken,
+    authorization: `Bot ${input.botToken}`,
     budget: input.budget,
     sleep: wait,
   };
@@ -81,7 +91,39 @@ export function createDiscordClient(input: {
         nonce: null,
       });
     },
+    editOriginal(applicationId, interactionToken, body) {
+      return call({
+        ...shared,
+        method: "PATCH",
+        url: webhookUrl(applicationId, interactionToken, "/messages/@original"),
+        channelId: "",
+        body,
+        nonce: null,
+        authorization: null,
+      });
+    },
+    createFollowUp(applicationId, interactionToken, content) {
+      return call({
+        ...shared,
+        method: "POST",
+        url: webhookUrl(applicationId, interactionToken, ""),
+        channelId: "",
+        body: { content, flags: EPHEMERAL },
+        nonce: null,
+        authorization: null,
+      });
+    },
   };
+}
+
+const EPHEMERAL = 1 << 6;
+
+function webhookUrl(
+  applicationId: string,
+  interactionToken: string,
+  suffix: string,
+): string {
+  return `${DISCORD_API}/webhooks/${encodeURIComponent(applicationId)}/${encodeURIComponent(interactionToken)}${suffix}`;
 }
 
 async function call(input: CallInput): Promise<SendResult> {
@@ -95,13 +137,16 @@ async function attempt(
 ): Promise<SendResult> {
   let response: Response;
   try {
+    const headers: Record<string, string> = {
+      "content-type": "application/json",
+      "user-agent": USER_AGENT,
+    };
+    if (input.authorization !== null) {
+      headers.authorization = input.authorization;
+    }
     response = await fetch(input.url, {
       method: input.method,
-      headers: {
-        authorization: `Bot ${input.token}`,
-        "content-type": "application/json",
-        "user-agent": USER_AGENT,
-      },
+      headers,
       body: JSON.stringify(wireBody(input.body, input.nonce)),
     });
   } catch {

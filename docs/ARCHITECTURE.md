@@ -30,7 +30,7 @@ flowchart LR
   Interactions --> ReplyJob["jobs/reply"]
   ReplyJob --> Source
   ReplyJob --> DB
-  ReplyJob --> Notifier
+  Interactions --> DiscordApi
 ```
 
 - **The cron** polls each app, diffs against D1, writes review changes and outbox rows together, checks whether a digest is due, then drains the outbox to Discord within a fixed budget.
@@ -82,9 +82,9 @@ flowchart TB
 
 - **`core/` imports nothing but `lib/`'s pure helpers.** No `fetch`, no D1, no env, no store or platform knowledge. Everything here is a pure function with unit tests.
 - **`sources/` knows one store and nothing about chat.** Raw API JSON never leaves `sources/<store>/`; it's normalised into `Review` there.
-- **`notifiers/` knows one chat platform and nothing about stores.** It renders from `Review` and digest data. Discord's interaction handling lives in `notifiers/discord/` and calls `jobs/reply`, which is platform-agnostic.
+- **`notifiers/` knows one chat platform and nothing about stores.** It renders from `Review` and digest data. Discord's interaction handling lives in `notifiers/discord/` and calls `jobs/reply`, which is platform-agnostic. That call is the one edge from `notifiers/` back to `jobs/`. `jobs/reply` does not import `notifiers/`; the interaction webhook edit and follow-up stay in `notifiers/discord/`.
 - **`store/` is the only place with SQL.** Jobs call named functions (`insertReviewWithOutbox`, `claimPending`, …), never `env.DB` directly.
-- **`jobs/` is the only layer that combines the others.**
+- **`jobs/` combines the others.** The interactions handler is the exception: it calls `jobs/reply`, then edits the Discord message itself.
 - **`index.ts`** builds the config, the budget and the concrete source and notifier, and hands them to jobs.
 
 ---

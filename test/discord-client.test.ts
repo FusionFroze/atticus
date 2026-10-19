@@ -9,6 +9,8 @@ import {
 import type { SendResult } from "../src/notifiers/types";
 
 const TOKEN = "test-bot-token";
+const APP = "123456789012345678";
+const INTERACTION_TOKEN = "interaction-token-should-not-log";
 const CHANNEL = "223456789012345678";
 const MESSAGE = "323456789012345678";
 const USER = "423456789012345678";
@@ -297,6 +299,62 @@ describe("discord client", () => {
     });
     expect(calls).toHaveLength(2);
     expect(sleepCalls).toEqual([100]);
+  });
+
+  it("edits the interaction message without the bot token", async () => {
+    const client = clientWith(() => json({ id: MESSAGE }));
+    const result = await client.editOriginal(APP, INTERACTION_TOKEN, {
+      content: "updated",
+      flags: 32768,
+    });
+    expect(result.ok).toBe(true);
+    expect(calls).toHaveLength(1);
+    const call = calls[0];
+    if (call === undefined) throw new Error("missing call");
+    expect(call.method).toBe("PATCH");
+    expect(call.url).toBe(
+      `${DISCORD_API}/webhooks/${APP}/${INTERACTION_TOKEN}/messages/@original`,
+    );
+    expect(call.authorization).toBeNull();
+    expect(call.userAgent).toBe(USER_AGENT);
+    expect(call.body).toEqual({
+      content: "updated",
+      flags: 32768,
+      allowed_mentions: { parse: [] },
+    });
+    expect(logged()).not.toContain(INTERACTION_TOKEN);
+    expect(logged()).not.toContain(TOKEN);
+  });
+
+  it("sends an ephemeral follow-up without the bot token", async () => {
+    const client = clientWith(() => json({ id: MESSAGE }));
+    const result = await client.createFollowUp(APP, INTERACTION_TOKEN, "nope");
+    expect(result.ok).toBe(true);
+    expect(calls).toHaveLength(1);
+    const call = calls[0];
+    if (call === undefined) throw new Error("missing call");
+    expect(call.method).toBe("POST");
+    expect(call.url).toBe(
+      `${DISCORD_API}/webhooks/${APP}/${INTERACTION_TOKEN}`,
+    );
+    expect(call.authorization).toBeNull();
+    expect(call.body).toEqual({
+      content: "nope",
+      flags: 64,
+      allowed_mentions: { parse: [] },
+    });
+    expect(logged()).not.toContain(INTERACTION_TOKEN);
+  });
+
+  it("does not call Discord when the budget is already spent", async () => {
+    installFetch(() => json({ id: MESSAGE }));
+    const client = createDiscordClient({
+      botToken: TOKEN,
+      budget: createBudget(Date.now(), 0),
+    });
+    const result = await client.editOriginal(APP, INTERACTION_TOKEN, {});
+    expect(result).toEqual({ ok: false, failure: { kind: "budget" } });
+    expect(calls).toHaveLength(0);
   });
 
   it("treats a 429 with no delay as 2s and does not retry", async () => {

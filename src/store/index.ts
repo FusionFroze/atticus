@@ -8,7 +8,12 @@ export {
   markOutboxSent,
   pruneOutbox,
 } from "./outbox";
-export { insertReviewWithOutbox, readReview, readReviews } from "./reviews";
+export {
+  insertReviewWithOutbox,
+  readReview,
+  readReviews,
+  writeBotReply,
+} from "./reviews";
 export { getState, releaseLease, setState, takeLease } from "./state";
 export type { ReviewUpdateOutcome } from "./update";
 export { updateReview } from "./update";

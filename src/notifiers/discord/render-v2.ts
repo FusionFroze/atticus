@@ -7,6 +7,7 @@ import type {
 } from "discord-api-types/v10";
 import type { ReviewMessageInput } from "../types";
 import type { DiscordMessageBody } from "./client";
+import { DRY_RUN_MARKER, publishedReply, repliedBy } from "./copy";
 import {
   actionRow,
   COMPONENTS_V2,
@@ -28,9 +29,16 @@ const TEXT_DISPLAY = 10 as ComponentType.TextDisplay;
 const SEPARATOR = 14 as ComponentType.Separator;
 const CONTAINER = 17 as ComponentType.Container;
 
+export type ReplyNote =
+  | { kind: "published"; text: string; userId: string; at: number }
+  | { kind: "dry_run"; text: string };
+
+// `note` is set only by the interaction edit. The cron renderer leaves it unset,
+// so a stored reply is not drawn here until v1-5.
 export function renderComponentsReview(
   input: ReviewMessageInput,
   mention: Mention,
+  note: ReplyNote | null = null,
 ): DiscordMessageBody {
   const title = reviewHeading(input.review);
   const footer = footerText(input.review, input.appName);
@@ -38,9 +46,11 @@ export function renderComponentsReview(
   const metaRaw = metaLine(input.review) ?? "";
   const label = originalLabel(input.review);
   const originalRaw = input.review.originalBody ?? "";
-  let bodyLimit = hasText(input.review.body) ? TEXT_LIMIT : 0;
-  let originalLimit = label !== null && hasText(originalRaw) ? TEXT_LIMIT : 0;
-  let metaLimit = metaRaw === "" ? 0 : TEXT_LIMIT;
+  const reply = replyLines(note);
+  const cap = Math.max(0, TEXT_LIMIT - textTotal(reply));
+  let bodyLimit = hasText(input.review.body) ? cap : 0;
+  let originalLimit = label !== null && hasText(originalRaw) ? cap : 0;
+  let metaLimit = metaRaw === "" ? 0 : cap;
 
   for (let guard = 0; guard < 12; guard += 1) {
     const laid = layout(
@@ -60,17 +70,15 @@ export function renderComponentsReview(
       laid.meta,
       footer,
     ]);
-    if (total <= TEXT_LIMIT) {
-      return finish(input, mention, [
-        mentionText,
-        title,
-        laid.body,
-        laid.original,
-        laid.meta,
-        footer,
-      ]);
+    if (total <= cap) {
+      return finish(
+        input,
+        mention,
+        [mentionText, title, laid.body, laid.original, laid.meta, footer],
+        reply,
+      );
     }
-    const over = total - TEXT_LIMIT;
+    const over = total - cap;
     if (laid.body !== undefined && charLength(laid.body) > 1) {
       bodyLimit = Math.max(0, charLength(laid.body) - over);
       continue;
@@ -87,20 +95,19 @@ export function renderComponentsReview(
     break;
   }
 
-  return finish(input, mention, [
-    mentionText,
-    title,
-    undefined,
-    undefined,
-    undefined,
-    footer,
-  ]);
+  return finish(
+    input,
+    mention,
+    [mentionText, title, undefined, undefined, undefined, footer],
+    reply,
+  );
 }
 
 function finish(
   input: ReviewMessageInput,
   mention: Mention,
   parts: readonly (string | undefined)[],
+  reply: readonly string[],
 ): DiscordMessageBody {
   const [ping, title, body, original, meta, footer] = parts;
   const children: APIComponentInContainer[] = [];
@@ -111,6 +118,10 @@ function finish(
   children.push(separator());
   if (meta !== undefined) children.push(textDisplay(meta));
   if (footer !== undefined) children.push(textDisplay(footer));
+  if (reply.length > 0) {
+    children.push(separator());
+    for (const line of reply) children.push(textDisplay(line));
+  }
   children.push(actionRow(input.review, input.consoleUrl));
   const container: APIContainerComponent = {
     type: CONTAINER,
@@ -153,6 +164,13 @@ function originalText(
   const prefix = `**${label}**\n`;
   if (charLength(prefix) >= limit) return truncate(prefix, limit);
   return `${prefix}${truncate(raw, limit - charLength(prefix))}`;
+}
+
+function replyLines(note: ReplyNote | null): readonly string[] {
+  if (note === null) return [];
+  if (note.kind === "dry_run")
+    return [publishedReply(note.text), DRY_RUN_MARKER];
+  return [publishedReply(note.text), repliedBy(note.userId, note.at)];
 }
 
 function textDisplay(content: string): APITextDisplayComponent {

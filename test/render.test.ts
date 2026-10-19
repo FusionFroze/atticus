@@ -5,7 +5,11 @@ import { isRecord } from "../src/lib/record";
 import type { DiscordMessageBody } from "../src/notifiers/discord/client";
 import { createDiscordClient } from "../src/notifiers/discord/client";
 import { truncate } from "../src/notifiers/discord/parts";
-import { renderNotice, renderReview } from "../src/notifiers/discord/render";
+import {
+  renderNotice,
+  renderRepliedMessage,
+  renderReview,
+} from "../src/notifiers/discord/render";
 import type { ReviewMessageInput } from "../src/notifiers/types";
 
 const USER = "423456789012345678";
@@ -73,6 +77,57 @@ describe("renderReview", () => {
     );
     expect(body).toContain("Calm and quiet.");
     expect(body.some((text) => text.endsWith("…"))).toBe(false);
+  });
+
+  it("leaves a stored reply off the cron render", () => {
+    const message = renderReview(
+      input(stored({ replyText: "Thanks for playing" })),
+    );
+    expect(texts(message).join("\n")).not.toContain("Your reply");
+    expect(buttons(message)[0]).toMatchObject({ label: "Edit reply" });
+  });
+
+  it("shows a published reply without letting it ping", () => {
+    const message = renderRepliedMessage({
+      review: stored({
+        replyText: "Thanks for playing",
+        repliedVia: "bot",
+        repliedBy: USER,
+        repliedAt: 1_700_000_100,
+      }),
+      appName: "Lune",
+      consoleUrl: "https://example.com/console",
+      note: {
+        kind: "published",
+        text: "Thanks for playing",
+        userId: USER,
+        at: 1_700_000_100,
+      },
+    });
+    const joined = texts(message).join("\n");
+    expect(joined).toContain("**Your reply**\nThanks for playing");
+    expect(joined).toContain(`Replied by <@${USER}> · <t:1700000100:R>`);
+    expect(buttons(message).map((button) => button.label)).toEqual([
+      "Edit reply",
+      "Open in Play Console",
+    ]);
+    expect(message.flags).toBe(32768);
+    expect(message.content).toBeUndefined();
+    expect(message.allowedMentions?.users).toBeUndefined();
+    expect(message.allowedMentions?.parse).toBeUndefined();
+  });
+
+  it("marks a dry run and keeps the Reply button", () => {
+    const message = renderRepliedMessage({
+      review: stored(),
+      appName: "Lune",
+      consoleUrl: null,
+      note: { kind: "dry_run", text: "Thanks for playing" },
+    });
+    const joined = texts(message).join("\n");
+    expect(joined).toContain("**Your reply**\nThanks for playing");
+    expect(joined).toContain("Dry run, not published.");
+    expect(buttons(message)[0]).toMatchObject({ label: "Reply", style: 1 });
   });
 
   it("keeps @everyone in the review text", () => {

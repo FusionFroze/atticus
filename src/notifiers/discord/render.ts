@@ -13,12 +13,32 @@ import {
   TEXT_LIMIT,
   truncate,
 } from "./parts";
-import { renderComponentsReview } from "./render-v2";
+import { type ReplyNote, renderComponentsReview } from "./render-v2";
 
 export { truncate } from "./parts";
 
 const TEXT_DISPLAY = 10 as ComponentType.TextDisplay;
 const CONTAINER = 17 as ComponentType.Container;
+
+export type { ReplyNote };
+
+export function renderRepliedMessage(input: {
+  review: ReviewMessageInput["review"];
+  appName: string;
+  consoleUrl: string | null;
+  note: ReplyNote;
+}): DiscordMessageBody {
+  return renderComponentsReview(
+    {
+      review: input.review,
+      appName: input.appName,
+      consoleUrl: input.consoleUrl,
+      mention: null,
+    },
+    null,
+    input.note,
+  );
+}
 
 export function renderReview(input: ReviewMessageInput): DiscordMessageBody {
   const mention = input.review.rating <= 2 ? input.mention : null;

@@ -33,6 +33,16 @@ describe("worker", () => {
     }
   });
 
+  it("answers a POST to any other path with an empty 404", async () => {
+    const response = await worker.fetch(
+      new Request("https://atticus.test/other", { method: "POST" }),
+      validEnv() as Env,
+      createExecutionContext(),
+    );
+    expect(response.status).toBe(404);
+    expect(await response.text()).toBe("");
+  });
+
   it("logs config_invalid and does not call Google when a var is missing", async () => {
     const { lines, restore } = captureLog();
     let fetches = 0;

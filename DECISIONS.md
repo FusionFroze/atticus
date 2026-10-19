@@ -40,7 +40,8 @@ The short, public list of how Atticus is built and why. Each line points to the 
 
 ## Replies
 
-- **Every interaction is signature-verified, and only allow-listed users in the configured channel can reply** (V51).
+- **Every interaction is signature-verified, and only allow-listed users in the configured channel can reply** (V51). A timestamp more than 5 minutes off the Worker clock, in either direction, is rejected as well. Discord does not require that window.
+- **The interaction webhook edit stays in the Discord notifier** (V53). `jobs/reply` publishes the reply and writes D1. It does not import a chat platform.
 - **Replies are written by humans, published in the background after Discord's 3-second window, and never retried blindly** (V53, V54).
 - **`DRY_RUN` shows the reply in Discord without publishing it or changing the database** (V55).
 

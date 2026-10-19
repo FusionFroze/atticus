@@ -36,6 +36,27 @@ export async function readReviews(
   return found;
 }
 
+export async function writeBotReply(
+  db: D1Database,
+  input: { id: number; text: string; userId: string; nowSeconds: number },
+): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE reviews SET
+         reply_text = ?, reply_modified_at = ?, replied_via = 'bot',
+         replied_by = ?, replied_at = ?
+       WHERE id = ?`,
+    )
+    .bind(
+      input.text,
+      input.nowSeconds,
+      input.userId,
+      input.nowSeconds,
+      input.id,
+    )
+    .run();
+}
+
 export async function readReview(
   db: D1Database,
   id: number,
