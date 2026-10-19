@@ -79,12 +79,105 @@ describe("renderReview", () => {
     expect(body.some((text) => text.endsWith("…"))).toBe(false);
   });
 
-  it("leaves a stored reply off the cron render", () => {
-    const message = renderReview(
-      input(stored({ replyText: "Thanks for playing" })),
+  it("draws a stored reply from the row", () => {
+    const external = renderReview(
+      input(
+        stored({
+          replyText: "Thanks for playing",
+          repliedVia: "external",
+          replyModifiedAt: 1_700_000_100,
+        }),
+      ),
     );
-    expect(texts(message).join("\n")).not.toContain("Your reply");
-    expect(buttons(message)[0]).toMatchObject({ label: "Edit reply" });
+    const bot = renderReview(
+      input(
+        stored({
+          replyText: "Thanks for playing",
+          repliedVia: "bot",
+          repliedBy: USER,
+          repliedAt: 1_700_000_100,
+        }),
+      ),
+    );
+    expect(texts(external).join("\n")).toContain(
+      "**Your reply**\nThanks for playing",
+    );
+    expect(texts(external).join("\n")).toContain(
+      "Replied in Play Console · <t:1700000100:R>",
+    );
+    expect(texts(bot).join("\n")).toContain(
+      `Replied by <@${USER}> · <t:1700000100:R>`,
+    );
+    expect(bot.allowedMentions?.users).toBeUndefined();
+    expect(buttons(external)[0]).toMatchObject({ label: "Edit reply" });
+    expect(buttons(bot)[0]).toMatchObject({ label: "Edit reply" });
+  });
+
+  it("shows Review updated, and the rating change when the stars moved", () => {
+    const changed = renderReview(
+      input(
+        stored({ rating: 4, previousRating: 2, body: "After" }),
+        null,
+        null,
+        true,
+      ),
+    );
+    const same = renderReview(
+      input(stored({ rating: 4, previousRating: 4 }), null, null, true),
+    );
+    const hidden = renderReview(
+      input(stored({ rating: 4, previousRating: 2 }), null, null, false),
+    );
+    expect(texts(changed).slice(0, 2)).toEqual(["Review updated", "★2 → ★4"]);
+    expect(texts(same)[0]).toBe("Review updated");
+    expect(texts(same).some((text) => text.includes("→"))).toBe(false);
+    expect(texts(hidden).join("\n")).not.toContain("Review updated");
+  });
+
+  it("uses Reply when the stored reply is older than the review", () => {
+    const message = renderReview(
+      input(
+        stored({
+          replyText: "Thanks",
+          repliedVia: "external",
+          replyModifiedAt: 1_600_000_000,
+          previousRating: 2,
+          rating: 4,
+        }),
+        null,
+        "https://play.google.com/console",
+        true,
+      ),
+    );
+    expect(texts(message).join("\n")).toContain("**Your reply**\nThanks");
+    expect(buttons(message).map((button) => button.label)).toEqual([
+      "Reply",
+      "Open in Play Console",
+    ]);
+  });
+
+  it("keeps the updated banner inside 4000 characters", () => {
+    const message = renderReview(
+      input(
+        stored({
+          rating: 5,
+          previousRating: 1,
+          title: "t".repeat(300),
+          body: "b".repeat(5000),
+          originalBody: "o".repeat(3000),
+          language: "fr",
+          device: "Pixel",
+        }),
+        null,
+        null,
+        true,
+      ),
+    );
+    const joined = texts(message);
+    const total = joined.reduce((sum, text) => sum + charLength(text), 0);
+    expect(joined).toContain("Review updated");
+    expect(joined).toContain("★1 → ★5");
+    expect(total).toBeLessThanOrEqual(4000);
   });
 
   it("shows a published reply without letting it ping", () => {
@@ -207,6 +300,39 @@ describe("renderReview", () => {
 });
 
 describe("renderNotice", () => {
+  it("renders warnings and recoveries from their codes", () => {
+    expect(
+      texts(renderNotice({ kind: "warning", warning: "google_auth" })),
+    ).toEqual([
+      "⚠️ Atticus can't sign in to Google, so reviews aren't being checked. README → Troubleshooting → Google sign-in.",
+    ]);
+    expect(
+      texts(
+        renderNotice({
+          kind: "warning",
+          warning: "play_forbidden",
+          appName: "Lune",
+        }),
+      ),
+    ).toEqual([
+      "⚠️ Atticus doesn't have permission to read reviews for **Lune**. New permissions can take up to a day to apply. README → Troubleshooting → Permission denied.",
+    ]);
+    expect(
+      texts(renderNotice({ kind: "recovered", subject: "google_auth" })),
+    ).toEqual(["✓ Back to normal: Google sign-in is working again."]);
+    expect(
+      texts(
+        renderNotice({
+          kind: "recovered",
+          subject: "play_forbidden",
+          appName: "Lune",
+        }),
+      ),
+    ).toEqual([
+      "✓ Back to normal: reading reviews for **Lune** is working again.",
+    ]);
+  });
+
   it("uses the connected line for post, silent, and none", () => {
     expect(notice(4, "post")).toBe(
       "Connected to **Lune** ✓ Found 4 written reviews from the last 7 days. Posting them below, oldest first.",
@@ -254,8 +380,9 @@ function input(
   review: StoredReview,
   mention: ReviewMessageInput["mention"] = null,
   consoleUrl: string | null = null,
+  showUpdated = false,
 ): ReviewMessageInput {
-  return { review, appName: "Lune", consoleUrl, mention };
+  return { review, appName: "Lune", consoleUrl, mention, showUpdated };
 }
 
 function stored(overrides: Partial<StoredReview> = {}): StoredReview {

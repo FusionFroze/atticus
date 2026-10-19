@@ -13,6 +13,25 @@ export async function getState(
   return row?.value ?? null;
 }
 
+export async function deleteState(db: D1Database, key: string): Promise<void> {
+  await db.prepare("DELETE FROM state WHERE key = ?").bind(key).run();
+}
+
+export async function listStateByPrefix(
+  db: D1Database,
+  prefix: string,
+): Promise<{ key: string; value: string }[]> {
+  const rows = await db
+    .prepare(
+      `SELECT key, value FROM state
+       WHERE substr(key, 1, ?) = ?
+       ORDER BY key`,
+    )
+    .bind(prefix.length, prefix)
+    .all<{ key: string; value: string }>();
+  return rows.results;
+}
+
 export async function setState(
   db: D1Database,
   key: string,

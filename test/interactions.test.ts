@@ -282,7 +282,7 @@ describe("POST /interactions", () => {
 
   it("opens an Edit reply modal prefilled from D1", async () => {
     const review = await insertReview({
-      developerReply: { text: REPLY, modifiedAt: 40 },
+      developerReply: { text: REPLY, modifiedAt: NOW },
     });
     const result = await post(JSON.stringify(component(`reply:${review.id}`)));
     expect(result.json).toMatchObject({
@@ -291,6 +291,25 @@ describe("POST /interactions", () => {
         components: [
           {
             description: EDIT_HINT,
+            component: { value: REPLY },
+          },
+        ],
+      },
+    });
+    assertClean(result.lines);
+  });
+
+  it("prefills Reply when the stored reply is older than the review", async () => {
+    const review = await insertReview({
+      developerReply: { text: REPLY, modifiedAt: NOW - 10 },
+    });
+    const result = await post(JSON.stringify(component(`reply:${review.id}`)));
+    expect(result.json).toMatchObject({
+      type: 9,
+      data: {
+        components: [
+          {
+            description: NEW_HINT,
             component: { value: REPLY },
           },
         ],

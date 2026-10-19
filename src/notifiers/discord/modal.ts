@@ -4,6 +4,7 @@ import type {
   ComponentType,
   TextInputStyle,
 } from "discord-api-types/v10";
+import { replyWouldNotify } from "../../core/reply";
 import type { StoredReview } from "../../core/review";
 import { EDIT_HINT, LABEL, modalTitle, NEW_HINT } from "./copy";
 
@@ -16,7 +17,7 @@ export function replyModal(review: StoredReview): {
   title: string;
   components: [APILabelComponent];
 } {
-  const editing = review.replyText !== null;
+  const editing = !replyWouldNotify(review);
   const input: APITextInputComponent = {
     type: TEXT_INPUT,
     custom_id: "reply-text",
@@ -25,7 +26,7 @@ export function replyModal(review: StoredReview): {
     max_length: 350,
     required: true,
   };
-  if (editing && review.replyText !== null) input.value = review.replyText;
+  if (review.replyText !== null) input.value = review.replyText;
   return {
     custom_id: `reply-modal:${review.id}`,
     title: modalTitle(review.author, review.rating),

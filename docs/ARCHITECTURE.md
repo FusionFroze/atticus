@@ -49,7 +49,7 @@ src/
   core/         the Review type and pure logic: diff, digest stats, time and text helpers
   sources/      ReviewSource interface; one folder per store (play/)
   notifiers/    Notifier interface; one folder per chat platform (discord/)
-  jobs/         orchestration: poll, send, digest, reply, health
+  jobs/         orchestration: poll, send, deliver, digest, reply, health
   store/        D1 queries; the only place SQL lives
   lib/          tiny shared utilities: log, budget, base64url, PEM
 migrations/     numbered D1 migrations

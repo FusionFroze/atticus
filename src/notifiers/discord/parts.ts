@@ -5,6 +5,7 @@ import type {
   ButtonStyle,
   ComponentType,
 } from "discord-api-types/v10";
+import { replyWouldNotify } from "../../core/reply";
 import type { StoredReview } from "../../core/review";
 import type { ReviewMessageInput } from "../types";
 import type { DiscordMessageBody } from "./client";
@@ -102,15 +103,14 @@ export function actionRow(
   consoleUrl: string | null,
 ): APIActionRowComponent<APIComponentInMessageActionRow> {
   const customId = `reply:${review.id}`;
-  const reply: APIButtonComponent =
-    review.replyText === null
-      ? { type: BUTTON, style: PRIMARY, label: "Reply", custom_id: customId }
-      : {
-          type: BUTTON,
-          style: SECONDARY,
-          label: "Edit reply",
-          custom_id: customId,
-        };
+  const reply: APIButtonComponent = replyWouldNotify(review)
+    ? { type: BUTTON, style: PRIMARY, label: "Reply", custom_id: customId }
+    : {
+        type: BUTTON,
+        style: SECONDARY,
+        label: "Edit reply",
+        custom_id: customId,
+      };
   const buttons: APIButtonComponent[] = [reply];
   if (
     consoleUrl !== null &&

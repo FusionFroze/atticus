@@ -3,6 +3,7 @@ export { readLatestMessage } from "./messages";
 export type { OutboxRow } from "./outbox";
 export {
   claimPending,
+  enqueueNotice,
   markOutboxFailed,
   markOutboxRetry,
   markOutboxSent,
@@ -14,6 +15,13 @@ export {
   readReviews,
   writeBotReply,
 } from "./reviews";
-export { getState, releaseLease, setState, takeLease } from "./state";
+export {
+  deleteState,
+  getState,
+  listStateByPrefix,
+  releaseLease,
+  setState,
+  takeLease,
+} from "./state";
 export type { ReviewUpdateOutcome } from "./update";
 export { updateReview } from "./update";

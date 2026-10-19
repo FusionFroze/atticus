@@ -26,7 +26,12 @@ export type DiscordMessageBody = {
   components?: readonly APIMessageComponent[];
   flags?: number;
   allowedMentions?: DiscordAllowedMentions;
+  messageReference?: { messageId: string; failIfNotExists: boolean };
 };
+
+export type DiscordMessageRead =
+  | { ok: true; components: unknown }
+  | { ok: false; failure: SendFailure };
 
 export type DiscordClient = {
   createMessage(
@@ -35,6 +40,7 @@ export type DiscordClient = {
     nonce: string,
   ): Promise<SendResult>;
   editMessage(ref: MessageRef, body: DiscordMessageBody): Promise<SendResult>;
+  getMessage(ref: MessageRef): Promise<DiscordMessageRead>;
   editOriginal(
     applicationId: string,
     interactionToken: string,
@@ -91,6 +97,12 @@ export function createDiscordClient(input: {
         nonce: null,
       });
     },
+    getMessage(ref) {
+      return readMessage({
+        ...shared,
+        url: `${DISCORD_API}/channels/${ref.channelId}/messages/${ref.messageId}`,
+      });
+    },
     editOriginal(applicationId, interactionToken, body) {
       return call({
         ...shared,
@@ -117,6 +129,71 @@ export function createDiscordClient(input: {
 }
 
 const EPHEMERAL = 1 << 6;
+
+type ReadInput = {
+  url: string;
+  authorization: string;
+  budget: Budget;
+  sleep: (ms: number) => Promise<void>;
+};
+
+async function readMessage(input: ReadInput): Promise<DiscordMessageRead> {
+  if (!input.budget.take()) return { ok: false, failure: { kind: "budget" } };
+  return readAttempt(input, false);
+}
+
+async function readAttempt(
+  input: ReadInput,
+  retried: boolean,
+): Promise<DiscordMessageRead> {
+  let response: Response;
+  try {
+    response = await fetch(input.url, {
+      method: "GET",
+      headers: {
+        authorization: input.authorization,
+        "user-agent": USER_AGENT,
+      },
+    });
+  } catch {
+    return { ok: false, failure: { kind: "unavailable", status: 0 } };
+  }
+
+  if (response.status === 429) {
+    const retryAfterMs = await readRetryAfter(response);
+    if (retried || retryAfterMs >= RETRY_UNDER_MS || !input.budget.take()) {
+      return { ok: false, failure: { kind: "rate_limited", retryAfterMs } };
+    }
+    await input.sleep(retryAfterMs);
+    return readAttempt(input, true);
+  }
+
+  if (response.status >= 200 && response.status < 300) {
+    const components = await readComponentList(response);
+    if (components === null) {
+      return { ok: false, failure: { kind: "invalid", status: 200 } };
+    }
+    return { ok: true, components };
+  }
+
+  const code = response.status === 404 ? await readErrorCode(response) : null;
+  if (response.body !== null && response.status !== 404) {
+    await response.body.cancel();
+  }
+  return { ok: false, failure: mapStatus(response.status, "GET", code) };
+}
+
+async function readComponentList(
+  response: Response,
+): Promise<unknown[] | null> {
+  try {
+    const parsed: unknown = await response.json();
+    if (!isRecord(parsed) || !Array.isArray(parsed.components)) return null;
+    return parsed.components;
+  } catch {
+    return null;
+  }
+}
 
 function webhookUrl(
   applicationId: string,
@@ -156,11 +233,16 @@ async function attempt(
   if (response.status === 429) return retryAfterLimit(input, response, retried);
 
   if (response.status >= 200 && response.status < 300) {
-    const id = await readMessageId(response);
-    if (id === null) {
+    const created = await readCreatedMessage(response);
+    if (created === null) {
       return { ok: false, failure: { kind: "unavailable", status: 200 } };
     }
-    return { ok: true, ref: { channelId: input.channelId, messageId: id } };
+    const ref: MessageRef = {
+      channelId: input.channelId,
+      messageId: created.id,
+    };
+    if (created.guildId !== null) ref.guildId = created.guildId;
+    return { ok: true, ref };
   }
 
   const code = response.status === 404 ? await readErrorCode(response) : null;
@@ -205,6 +287,12 @@ function wireBody(
   if (body.embeds !== undefined) json.embeds = body.embeds;
   if (body.components !== undefined) json.components = body.components;
   if (body.flags !== undefined) json.flags = body.flags;
+  if (body.messageReference !== undefined) {
+    json.message_reference = {
+      message_id: body.messageReference.messageId,
+      fail_if_not_exists: body.messageReference.failIfNotExists,
+    };
+  }
   if (nonce !== null) {
     json.nonce = nonce;
     json.enforce_nonce = true;
@@ -214,20 +302,22 @@ function wireBody(
 
 function mapStatus(
   status: number,
-  method: "POST" | "PATCH",
+  method: "GET" | "POST" | "PATCH",
   code: number | null,
 ): SendFailure {
   if (status === 400) return { kind: "invalid", status };
   if (status === 401) return { kind: "unavailable", status: 401 };
   if (status === 403) return { kind: "channel" };
   if (status === 404) {
-    if (method === "PATCH" && code !== UNKNOWN_CHANNEL) return { kind: "gone" };
+    if (method !== "POST" && code !== UNKNOWN_CHANNEL) return { kind: "gone" };
     return { kind: "channel" };
   }
   return { kind: "unavailable", status };
 }
 
-async function readMessageId(response: Response): Promise<string | null> {
+async function readCreatedMessage(
+  response: Response,
+): Promise<{ id: string; guildId: string | null } | null> {
   try {
     const parsed: unknown = await response.json();
     if (
@@ -237,7 +327,11 @@ async function readMessageId(response: Response): Promise<string | null> {
     ) {
       return null;
     }
-    return parsed.id;
+    const guildId =
+      typeof parsed.guild_id === "string" && parsed.guild_id !== ""
+        ? parsed.guild_id
+        : null;
+    return { id: parsed.id, guildId };
   } catch {
     return null;
   }

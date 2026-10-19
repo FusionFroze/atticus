@@ -17,6 +17,7 @@ import {
   updateReview,
   writeFirstRun,
 } from "../store";
+import { noteListFailure, noteListSuccess, noteRemovedApps } from "./health";
 
 const LAST_POLL_AT = "last_poll_at";
 
@@ -30,8 +31,7 @@ type RunCounts = {
 };
 
 // Under the lease: list, diff, write, then the sender. First successful list sets
-// app_seen, even when truncated. A failed list does not. Warnings wait for v1-5;
-// this run only logs.
+// app_seen, even when truncated. A failed list does not.
 export async function poll(input: {
   db: D1Database;
   config: Config;
@@ -58,6 +58,7 @@ export async function poll(input: {
   };
   try {
     log("run_start");
+    await noteRemovedApps(input.db, input.config.apps, nowSeconds);
     for (const app of input.config.apps) {
       const stop = await pollApp(input, app, nowSeconds, counts);
       if (stop) break;
@@ -101,9 +102,11 @@ async function pollApp(
       log("budget_exhausted");
       return true;
     }
+    await noteListFailure(input.db, app, listed.failure, nowSeconds);
     return false;
   }
 
+  await noteListSuccess(input.db, app.id, nowSeconds);
   if (listed.truncated) log("poll_truncated", { appId: app.id });
   log("poll_app", {
     appId: app.id,

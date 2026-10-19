@@ -7,6 +7,12 @@ import type {
 import type { DigestInput, NoticeInput, ReviewMessageInput } from "../types";
 import type { DiscordMessageBody } from "./client";
 import {
+  GOOGLE_AUTH_RECOVERED,
+  GOOGLE_AUTH_WARNING,
+  playForbiddenRecovered,
+  playForbiddenWarning,
+} from "./copy";
+import {
   COMPONENTS_V2,
   charLength,
   hasText,
@@ -34,6 +40,7 @@ export function renderRepliedMessage(input: {
       appName: input.appName,
       consoleUrl: input.consoleUrl,
       mention: null,
+      showUpdated: input.review.previousRating !== null,
     },
     null,
     input.note,
@@ -46,8 +53,7 @@ export function renderReview(input: ReviewMessageInput): DiscordMessageBody {
 }
 
 export function renderNotice(input: NoticeInput): DiscordMessageBody {
-  const text = input.kind === "connected" ? connectedText(input) : input.text;
-  return renderPlain(text);
+  return renderPlain(noticeText(input));
 }
 
 export function renderDigest(input: DigestInput): DiscordMessageBody {
@@ -69,6 +75,18 @@ function renderPlain(text: string, title?: string): DiscordMessageBody {
     components: children,
   };
   return { flags: COMPONENTS_V2, components: [container] };
+}
+
+function noticeText(input: NoticeInput): string {
+  if (input.kind === "connected") return connectedText(input);
+  if (input.kind === "warning") {
+    return input.warning === "google_auth"
+      ? GOOGLE_AUTH_WARNING
+      : playForbiddenWarning(input.appName);
+  }
+  return input.subject === "google_auth"
+    ? GOOGLE_AUTH_RECOVERED
+    : playForbiddenRecovered(input.appName);
 }
 
 function connectedText(

@@ -41,8 +41,38 @@ export function publishedReply(text: string): string {
   return `**Your reply**\n${text}`;
 }
 
+export const REVIEW_UPDATED = "Review updated";
+export const SUPERSEDED = "Updated, see the newer message.";
+
 export function repliedBy(userId: string, at: number): string {
   return `Replied by <@${userId}> · <t:${at}:R>`;
+}
+
+export function ratingChange(previous: number, current: number): string {
+  return `★${previous} → ★${current}`;
+}
+
+export function repliedInConsole(at: number): string {
+  return `Replied in Play Console · <t:${at}:R>`;
+}
+
+export function supersededLine(link: string | null): string {
+  if (link === null) return SUPERSEDED;
+  return `Updated, see the [newer message](${link}).`;
+}
+
+export const GOOGLE_AUTH_WARNING =
+  "⚠️ Atticus can't sign in to Google, so reviews aren't being checked. README → Troubleshooting → Google sign-in.";
+
+export function playForbiddenWarning(appName: string): string {
+  return `⚠️ Atticus doesn't have permission to read reviews for **${appName}**. New permissions can take up to a day to apply. README → Troubleshooting → Permission denied.`;
+}
+
+export const GOOGLE_AUTH_RECOVERED =
+  "✓ Back to normal: Google sign-in is working again.";
+
+export function playForbiddenRecovered(appName: string): string {
+  return `✓ Back to normal: reading reviews for **${appName}** is working again.`;
 }
 
 export function replyFailureText(kind: string): string {

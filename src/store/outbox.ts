@@ -26,7 +26,7 @@ type OutboxRecord = {
 const OUTBOX_KEEP_SECONDS = 30 * 24 * 60 * 60;
 
 // A read. The lease and the Discord nonce are the locks; this does not change status.
-// kinds, when passed, leaves deferred rows (warning, recovered, digest) unclaimed.
+// kinds, when passed, leaves anything else (digest, until v1-6) unclaimed.
 export async function claimPending(
   db: D1Database,
   nowSeconds: number,
@@ -118,6 +118,21 @@ export async function markOutboxRetry(
        WHERE id = ?`,
     )
     .bind(nextAttemptAt, lastError, outboxId)
+    .run();
+}
+
+// sort_key -1, so a warning or recovery is claimed before a Connected row.
+export async function enqueueNotice(
+  db: D1Database,
+  input: { kind: "warning" | "recovered"; payload: string; nowSeconds: number },
+): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO outbox (
+         kind, review_pk, payload, status, sort_key, attempts, next_attempt_at, created_at
+       ) VALUES (?, NULL, ?, 'pending', -1, 0, 0, ?)`,
+    )
+    .bind(input.kind, input.payload, input.nowSeconds)
     .run();
 }
 

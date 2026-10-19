@@ -1,12 +1,10 @@
 import type { Config } from "../config/types";
-import type { StoredReview } from "../core/review";
 import type { Budget } from "../lib/budget";
 import { log } from "../lib/log";
 import { isRecord } from "../lib/record";
 import type {
   NoticeInput,
   Notifier,
-  ReviewMessageInput,
   SendFailure,
   SendResult,
 } from "../notifiers/types";
@@ -16,22 +14,21 @@ import {
   markOutboxRetry,
   markOutboxSent,
   type OutboxRow,
-  readLatestMessage,
-  readReview,
-  setState,
 } from "../store";
+import { postStoredReview } from "./deliver";
+import { clearDiscordChannel, raiseDiscordChannel } from "./health";
 
 const SEND_KINDS = [
   "review_new",
   "review_edited",
   "message_update",
   "connected",
+  "warning",
+  "recovered",
 ] as const;
 
 // attempts is 0 before the first failure. The fifth failure has no further delay.
 const RETRY_BACKOFF_SECONDS = [60, 300, 900, 3600] as const;
-
-const CHANNEL_WARN = "warn:discord_channel";
 
 type StopWhy =
   | "rate_limited"
@@ -110,19 +107,23 @@ async function deliver(
   nowSeconds: number,
   markSent: typeof markOutboxSent,
 ): Promise<Step> {
-  if (row.kind === "connected") {
-    return deliverConnected(input, row, nowSeconds, markSent);
+  if (
+    row.kind === "connected" ||
+    row.kind === "warning" ||
+    row.kind === "recovered"
+  ) {
+    return deliverNotice(input, row, nowSeconds, markSent);
   }
   return deliverReview(input, row, nowSeconds, markSent);
 }
 
-async function deliverConnected(
-  input: { db: D1Database; notifier: Notifier },
+async function deliverNotice(
+  input: { db: D1Database; config: Config; notifier: Notifier },
   row: OutboxRow,
   nowSeconds: number,
   markSent: typeof markOutboxSent,
 ): Promise<Step> {
-  const notice = connectedNotice(row.payload);
+  const notice = noticeFrom(input.config, row.kind, row.payload);
   if (notice === null) {
     await failRow(input.db, row, "payload invalid");
     return "next";
@@ -140,72 +141,82 @@ async function deliverReview(
   nowSeconds: number,
   markSent: typeof markOutboxSent,
 ): Promise<Step> {
-  if (row.reviewPk === null) {
-    await failRow(input.db, row, "review missing");
-    return "next";
-  }
-  const review = await readReview(input.db, row.reviewPk);
-  if (review === null) {
-    await failRow(input.db, row, "review missing");
-    return "next";
-  }
-  const result = await postOrEdit(
+  const posted = await postStoredReview(
     input.db,
     input.notifier,
+    input.config,
     row,
-    reviewMessage(input.config, review, row.kind),
   );
-  if (!result.ok)
-    return applyFailure(input.db, row, result.failure, nowSeconds);
+  if (!posted.ok) {
+    await failRow(input.db, row, "review missing");
+    return "next";
+  }
+  if (!posted.result.ok) {
+    return applyFailure(input.db, row, posted.result.failure, nowSeconds);
+  }
   await finishSent(
     input.db,
     row,
-    result,
-    review.modifiedAt,
+    posted.result,
+    posted.modifiedAt,
     nowSeconds,
     markSent,
   );
   return "sent";
 }
 
-async function postOrEdit(
-  db: D1Database,
-  notifier: Notifier,
-  row: OutboxRow,
-  message: ReviewMessageInput,
-): Promise<SendResult> {
-  if (row.kind === "message_update" && row.reviewPk !== null) {
-    const latest = await readLatestMessage(db, row.reviewPk);
-    if (latest !== null) return notifier.updateReview(latest, message);
+function noticeFrom(
+  config: Config,
+  kind: string,
+  payload: string,
+): NoticeInput | null {
+  if (kind === "connected") return connectedNotice(payload);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(payload);
+  } catch {
+    return null;
   }
-  return notifier.postReview(message, `o${row.id}`);
+  if (!isRecord(parsed) || parsed.notice !== kind) return null;
+  if (kind === "warning") return warningNotice(config, parsed);
+  if (kind === "recovered") return recoveredNotice(parsed);
+  return null;
 }
 
-function reviewMessage(
+function warningNotice(
   config: Config,
-  review: StoredReview,
-  kind: string,
-): ReviewMessageInput {
-  const app = config.apps.find(
-    (item) => item.store === review.store && item.id === review.appId,
-  );
+  parsed: Record<string, unknown>,
+): Extract<NoticeInput, { kind: "warning" }> | null {
+  if (parsed.warning === "google_auth") {
+    return { kind: "warning", warning: "google_auth" };
+  }
+  if (parsed.warning !== "play_forbidden") return null;
+  if (typeof parsed.appId !== "string" || parsed.appId.length === 0) {
+    return null;
+  }
+  const named = config.apps.find((app) => app.id === parsed.appId);
   return {
-    review,
-    appName: app?.name ?? review.appId,
-    consoleUrl: app?.consoleUrl ?? null,
-    mention: mentionFor(config, kind, review.rating),
+    kind: "warning",
+    warning: "play_forbidden",
+    appName: named?.name ?? parsed.appId,
   };
 }
 
-function mentionFor(
-  config: Config,
-  kind: string,
-  rating: number,
-): ReviewMessageInput["mention"] {
-  if (config.pingOnLowRating === null) return null;
-  if (kind !== "review_new" && kind !== "review_edited") return null;
-  if (rating > 2) return null;
-  return config.pingOnLowRating;
+function recoveredNotice(
+  parsed: Record<string, unknown>,
+): Extract<NoticeInput, { kind: "recovered" }> | null {
+  if (parsed.subject === "google_auth") {
+    return { kind: "recovered", subject: "google_auth" };
+  }
+  if (parsed.subject !== "play_forbidden") return null;
+  if (typeof parsed.appName !== "string" || parsed.appName.length === 0) {
+    return null;
+  }
+  return {
+    kind: "recovered",
+    subject: "play_forbidden",
+    appName: parsed.appName,
+  };
 }
 
 function connectedNotice(
@@ -236,7 +247,7 @@ async function applyFailure(
   if (failure.kind === "rate_limited") return "rate_limited";
   if (failure.kind === "budget") return "budget";
   if (failure.kind === "channel") {
-    await setState(db, CHANNEL_WARN, "1", nowSeconds);
+    await raiseDiscordChannel(db, nowSeconds);
     return "channel";
   }
   if (failure.kind === "unavailable" && failure.status === 401) {
@@ -272,6 +283,7 @@ async function finishSent(
     version,
     nowSeconds,
   });
+  await clearDiscordChannel(db);
   log("outbox_sent", { outboxId: row.id, kind: row.kind });
 }
 

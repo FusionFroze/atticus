@@ -101,6 +101,35 @@ describe("discord client", () => {
     expect(call.body).not.toHaveProperty("enforce_nonce");
   });
 
+  it("sends a reply reference and keeps the guild id", async () => {
+    const guildId = "623456789012345678";
+    const referenced = "723456789012345678";
+    const client = clientWith(() => json({ id: MESSAGE, guild_id: guildId }));
+    const result = await client.createMessage(
+      CHANNEL,
+      {
+        messageReference: { messageId: referenced, failIfNotExists: false },
+      },
+      "prev-a2",
+    );
+
+    expect(result).toEqual({
+      ok: true,
+      ref: { channelId: CHANNEL, messageId: MESSAGE, guildId },
+    });
+    const call = calls[0];
+    if (call === undefined) throw new Error("missing call");
+    expect(call.body).toEqual({
+      nonce: "prev-a2",
+      enforce_nonce: true,
+      allowed_mentions: { parse: [] },
+      message_reference: {
+        message_id: referenced,
+        fail_if_not_exists: false,
+      },
+    });
+  });
+
   it("maps a 200 with an id", async () => {
     const client = clientWith(() => json({ id: MESSAGE }, 200));
     await expect(client.createMessage(CHANNEL, {}, "o1")).resolves.toEqual({

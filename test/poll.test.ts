@@ -10,6 +10,7 @@ import {
   claimPending,
   getState,
   readReviews,
+  setState,
   takeLease,
 } from "../src/store";
 import malformed from "./fixtures/play/malformed.json";
@@ -425,6 +426,15 @@ describe("poll", () => {
     const row = await one("review-lune");
     expect(await queued()).toEqual([
       expect.objectContaining({
+        kind: "warning",
+        sortKey: -1,
+        payload: JSON.stringify({
+          notice: "warning",
+          warning: "play_forbidden",
+          appId: broken.id,
+        }),
+      }),
+      expect.objectContaining({
         kind: "connected",
         sortKey: 0,
         payload: connectedPayload(lune, 1, "post"),
@@ -435,12 +445,99 @@ describe("poll", () => {
         sortKey: 1_700_000_000,
       }),
     ]);
+    expect(await getState(env.DB, `warn:play_forbidden:${broken.id}`)).toBe(
+      "Broken",
+    );
+    expect(events(lines)).toContainEqual({
+      event: "warning_raised",
+      kind: "play_forbidden",
+      appId: broken.id,
+    });
     expect(events(lines)).toContainEqual({
       event: "poll_failed",
       appId: broken.id,
       kind: "forbidden",
     });
     expectClean(lines, ["Lune body"]);
+  });
+
+  it("carries on after a Play 429 and does not warn", async () => {
+    const { lines, calls } = await withGoogle(
+      (request) => {
+        if (isToken(request)) return tokenResponse();
+        if (request.url.includes(`/applications/${broken.id}/`)) {
+          return new Response(null, { status: 429 });
+        }
+        if (request.url.includes(`/applications/${lune.id}/`)) {
+          return Response.json({
+            reviews: [
+              playReview({
+                reviewId: "review-lune",
+                text: "Lune body",
+                rating: 5,
+                seconds: "1700000000",
+              }),
+            ],
+          });
+        }
+        return new Response("unexpected", { status: 500 });
+      },
+      () => pollOnce("post", [broken, lune]),
+    );
+
+    expect(calls.some((url) => url.includes(`/applications/${lune.id}/`))).toBe(
+      true,
+    );
+    expect(await getState(env.DB, appSeenKey(lune))).toBe("1");
+    expect(await countWhere("reviews", broken.id)).toBe(0);
+    expect(await queued()).toEqual([
+      expect.objectContaining({ kind: "connected", sortKey: 0 }),
+      expect.objectContaining({ kind: "review_new" }),
+    ]);
+    expect(events(lines)).toContainEqual({
+      event: "poll_failed",
+      appId: broken.id,
+      kind: "rate_limited",
+    });
+    expect(
+      events(lines).some((event) => event.event === "warning_raised"),
+    ).toBe(false);
+    expectClean(lines, ["Lune body"]);
+  });
+
+  it("clears a play warning whose app left the config", async () => {
+    await setState(
+      env.DB,
+      "warn:play_forbidden:com.fusionfroze.atticus.missing",
+      "Missing",
+      NOW,
+    );
+    const { lines } = await withGoogle(
+      pageOf(() => []),
+      () => pollOnce("post"),
+    );
+    expect(
+      await getState(
+        env.DB,
+        "warn:play_forbidden:com.fusionfroze.atticus.missing",
+      ),
+    ).toBeNull();
+    expect(await queued()).toContainEqual(
+      expect.objectContaining({
+        kind: "recovered",
+        sortKey: -1,
+        payload: JSON.stringify({
+          notice: "recovered",
+          subject: "play_forbidden",
+          appName: "Missing",
+        }),
+      }),
+    );
+    expect(events(lines)).toContainEqual({
+      event: "warning_cleared",
+      kind: "play_forbidden",
+      appId: "com.fusionfroze.atticus.missing",
+    });
   });
 
   it("logs run_skipped_locked and skips Google when the lease is held", async () => {

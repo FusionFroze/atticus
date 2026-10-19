@@ -1,6 +1,10 @@
 import type { StoredReview } from "../core/review";
 
-export type MessageRef = { channelId: string; messageId: string };
+export type MessageRef = {
+  channelId: string;
+  messageId: string;
+  guildId?: string;
+};
 
 export type SendFailure =
   | { kind: "rate_limited"; retryAfterMs: number }
@@ -19,6 +23,7 @@ export type ReviewMessageInput = {
   appName: string;
   consoleUrl: string | null;
   mention: { kind: "role" | "user"; id: string } | null;
+  showUpdated: boolean;
 };
 
 export type NoticeInput =
@@ -28,15 +33,21 @@ export type NoticeInput =
       count: number;
       backfill: "post" | "silent";
     }
-  | { kind: "warning"; text: string }
-  | { kind: "recovered"; text: string };
+  | { kind: "warning"; warning: "google_auth" }
+  | { kind: "warning"; warning: "play_forbidden"; appName: string }
+  | { kind: "recovered"; subject: "google_auth" }
+  | { kind: "recovered"; subject: "play_forbidden"; appName: string };
 
 export type DigestInput = { appName: string; text: string };
 
 // One method per outbox kind. Rendering uses Review rows, never Play's raw JSON.
-// warning, recovered, and digest stay pending until v1-5 and v1-6.
+// digest stays pending until v1-6.
 export interface Notifier {
-  postReview(input: ReviewMessageInput, nonce: string): Promise<SendResult>;
+  postReview(
+    input: ReviewMessageInput,
+    nonce: string,
+    previous?: MessageRef | null,
+  ): Promise<SendResult>;
   updateReview(ref: MessageRef, input: ReviewMessageInput): Promise<SendResult>;
   postNotice(input: NoticeInput, nonce: string): Promise<SendResult>;
   postDigest(input: DigestInput, nonce: string): Promise<SendResult>;

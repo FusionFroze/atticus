@@ -14,6 +14,7 @@ import {
   getState,
   insertReviewWithOutbox,
   markOutboxSent,
+  setState,
   writeFirstRun,
 } from "../src/store";
 
@@ -24,6 +25,7 @@ const NOW_MS = 1_800_000_000_000;
 const NOW = 1_800_000_000;
 const MARKER = "UNIQUE_DISCORD_BODY_MARKER";
 const MESSAGE = "888888888888888888";
+const GUILD = "623456789012345678";
 
 const lune = {
   store: "play" as const,
@@ -289,19 +291,26 @@ describe("send", () => {
     expectQuiet(lines, ["fixture-0", "fixture-199", "Should Not Log Author"]);
   }, 30_000);
 
-  it("stops on a channel error and sets the warning flag", async () => {
+  it("stops on a channel error and raises the warning once", async () => {
     await saveQueued(review({ reviewId: "first", modifiedAt: 1 }));
     await saveQueued(review({ reviewId: "second", modifiedAt: 2 }));
     const { calls, lines } = await drive(
       () => new Response(null, { status: 403 }),
-      () => runSend(createBudget(Date.now())),
+      async () => {
+        const budget = createBudget(Date.now());
+        await runSend(budget);
+        await runSend(budget);
+      },
     );
-    expect(calls).toHaveLength(1);
+    expect(calls).toHaveLength(2);
     expect(await rows()).toEqual([
       expect.objectContaining({ status: "pending", attempts: 0 }),
       expect.objectContaining({ status: "pending", attempts: 0 }),
     ]);
     expect(await getState(env.DB, "warn:discord_channel")).toBe("1");
+    expect(
+      events(lines).filter((event) => event.event === "warning_raised"),
+    ).toEqual([{ event: "warning_raised", kind: "discord_channel" }]);
     expect(events(lines)).toContainEqual({
       event: "send_stopped",
       why: "channel",
@@ -320,6 +329,62 @@ describe("send", () => {
       event: "send_stopped",
       why: "unauthorized",
     });
+  });
+
+  it("replies to the previous message and drops its buttons", async () => {
+    const id = await save(
+      review({ reviewId: "edited", rating: 4, modifiedAt: 20 }),
+    );
+    await env.DB.prepare(
+      "UPDATE reviews SET previous_rating = ?, rating = ? WHERE id = ?",
+    )
+      .bind(2, 4, id)
+      .run();
+    await remember(id, MESSAGE);
+    const editedId = await enqueue({
+      kind: "review_edited",
+      reviewPk: id,
+      sortKey: 20,
+    });
+    const { calls, lines } = await drive(
+      (index) => {
+        if (index === 0) return json(200, { id: "new-1", guild_id: GUILD });
+        if (index === 1) {
+          return json(200, {
+            id: MESSAGE,
+            components: [
+              {
+                type: 17,
+                components: [
+                  { type: 10, content: "keep-me" },
+                  { type: 1, components: [{ type: 2, label: "Reply" }] },
+                ],
+              },
+            ],
+          });
+        }
+        return json(200, { id: MESSAGE });
+      },
+      () => runSend(createBudget(Date.now())),
+    );
+
+    expect(calls.map((call) => call.method)).toEqual(["POST", "GET", "PATCH"]);
+    expect(calls[0]?.body.nonce).toBe(`o${editedId}`);
+    expect(calls[0]?.body.message_reference).toEqual({
+      message_id: MESSAGE,
+      fail_if_not_exists: false,
+    });
+    expect(JSON.stringify(calls[0]?.body)).toContain("Review updated");
+    expect(JSON.stringify(calls[0]?.body)).toContain("★2 → ★4");
+    expect(calls[1]?.body).toEqual({});
+    expect(JSON.stringify(calls[2]?.body)).toContain("keep-me");
+    expect(JSON.stringify(calls[2]?.body)).toContain(
+      `Updated, see the [newer message](https://discord.com/channels/${GUILD}/${CHANNEL}/new-1).`,
+    );
+    expect(JSON.stringify(calls[2]?.body)).not.toContain('"label":"Reply"');
+    expect(calls[2]?.body.allowed_mentions).toEqual({ parse: [] });
+    expect(await onlyRow()).toMatchObject({ status: "sent" });
+    expectQuiet(lines, ["keep-me", "fixture-body"]);
   });
 
   it("posts an edit and patches the latest message", async () => {
@@ -375,23 +440,27 @@ describe("send", () => {
     expect(await onlyRow()).toMatchObject({ status: "sent" });
   });
 
-  it("backs off a deleted message and does not post a new one", async () => {
+  it("reposts a deleted message as a new one", async () => {
     const id = await save(review());
     await remember(id, MESSAGE);
     await enqueue({ kind: "message_update", reviewPk: id, sortKey: 1 });
     const { calls } = await drive(
-      () => json(404, { code: 10008 }),
+      (index) => {
+        if (index === 0) return json(404, { code: 10008 });
+        return json(200, { id: "new-9" });
+      },
       () => runSend(createBudget(Date.now())),
     );
-    expect(calls).toHaveLength(1);
-    expect(calls[0]?.method).toBe("PATCH");
+    expect(calls.map((call) => call.method)).toEqual(["PATCH", "POST"]);
     expect(calls[0]?.url).toContain(`/messages/${MESSAGE}`);
-    expect(await onlyRow()).toMatchObject({
-      status: "pending",
-      attempts: 1,
-      last_error: "404 gone",
-    });
-    expect(await messageCount()).toBe(1);
+    expect(calls[1]?.body.message_reference).toBeUndefined();
+    expect(calls[1]?.body.nonce).toBeTypeOf("string");
+    expect(await onlyRow()).toMatchObject({ status: "sent" });
+    expect(await messageCount()).toBe(2);
+    const latest = await env.DB.prepare(
+      "SELECT message_id FROM messages WHERE is_latest = 1",
+    ).first<{ message_id: string }>();
+    expect(latest?.message_id).toBe("new-9");
   });
 
   it("fails a bad Connected payload and still sends the next row", async () => {
@@ -432,16 +501,68 @@ describe("send", () => {
     expectQuiet(lines, ["fixture-old", "fixture-new"]);
   });
 
-  it("leaves warning rows pending", async () => {
-    await enqueue({ kind: "warning", reviewPk: null, sortKey: -1 });
+  it("sends a warning before the review", async () => {
+    await enqueue({
+      kind: "warning",
+      reviewPk: null,
+      sortKey: -1,
+      payload: JSON.stringify({ notice: "warning", warning: "google_auth" }),
+    });
     await saveQueued(review({ modifiedAt: 50, body: "fixture-ok" }));
-    const { calls } = await drive(
+    const { calls, lines } = await drive(
       () => ok("8"),
       () => runSend(createBudget(Date.now())),
     );
-    expect(calls).toHaveLength(1);
+    expect(calls).toHaveLength(2);
+    expect(description(calls[0])).toBe(
+      "⚠️ Atticus can't sign in to Google, so reviews aren't being checked. README → Troubleshooting → Google sign-in.",
+    );
+    expect(description(calls[1])).toBe("fixture-ok");
     expect(await rows()).toEqual([
-      expect.objectContaining({ kind: "warning", status: "pending" }),
+      expect.objectContaining({ kind: "warning", status: "sent" }),
+      expect.objectContaining({ kind: "review_new", status: "sent" }),
+    ]);
+    expectQuiet(lines, ["fixture-ok"]);
+  });
+
+  it("fails a warning payload that has no code", async () => {
+    await enqueue({
+      kind: "warning",
+      reviewPk: null,
+      sortKey: -1,
+      payload: JSON.stringify({ notice: "nope" }),
+    });
+    await saveQueued(review({ modifiedAt: 50, body: "fixture-ok" }));
+    const { calls, lines } = await drive(
+      () => ok("8b"),
+      () => runSend(createBudget(Date.now())),
+    );
+    expect(calls).toHaveLength(1);
+    expect(description(calls[0])).toBe("fixture-ok");
+    expect(await rows()).toEqual([
+      expect.objectContaining({
+        kind: "warning",
+        status: "failed",
+        last_error: "payload invalid",
+      }),
+      expect.objectContaining({ kind: "review_new", status: "sent" }),
+    ]);
+    expect(lines.join("\n")).not.toContain("nope");
+  });
+
+  it("clears a channel warning on the next successful send", async () => {
+    await setState(env.DB, "warn:discord_channel", "1", NOW);
+    await saveQueued(review());
+    const { lines } = await drive(
+      () => ok("9"),
+      () => runSend(createBudget(Date.now())),
+    );
+    expect(await getState(env.DB, "warn:discord_channel")).toBeNull();
+    expect(events(lines)).toContainEqual({
+      event: "warning_cleared",
+      kind: "discord_channel",
+    });
+    expect(await rows()).toEqual([
       expect.objectContaining({ kind: "review_new", status: "sent" }),
     ]);
   });
@@ -540,7 +661,9 @@ async function drive(
   }) as typeof console.log;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = new Request(input, init);
-    const body = JSON.parse(await request.text()) as Record<string, unknown>;
+    const text = await request.clone().text();
+    let body: Record<string, unknown> = {};
+    if (text !== "") body = JSON.parse(text) as Record<string, unknown>;
     calls.push({ method: request.method, url: request.url, body });
     return respond(calls.length - 1);
   }) as typeof fetch;
@@ -649,9 +772,12 @@ function componentTexts(components: unknown): string[] {
   return found;
 }
 
-function events(lines: string[]): { event: string; why?: string }[] {
+function events(
+  lines: string[],
+): { event: string; why?: string; kind?: string }[] {
   return lines.map(
-    (line) => JSON.parse(line) as { event: string; why?: string },
+    (line) =>
+      JSON.parse(line) as { event: string; why?: string; kind?: string },
   );
 }
 

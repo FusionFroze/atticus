@@ -5,9 +5,17 @@ import type {
   APITextDisplayComponent,
   ComponentType,
 } from "discord-api-types/v10";
+import type { StoredReview } from "../../core/review";
 import type { ReviewMessageInput } from "../types";
 import type { DiscordMessageBody } from "./client";
-import { DRY_RUN_MARKER, publishedReply, repliedBy } from "./copy";
+import {
+  DRY_RUN_MARKER,
+  publishedReply,
+  REVIEW_UPDATED,
+  ratingChange,
+  repliedBy,
+  repliedInConsole,
+} from "./copy";
 import {
   actionRow,
   COMPONENTS_V2,
@@ -33,8 +41,7 @@ export type ReplyNote =
   | { kind: "published"; text: string; userId: string; at: number }
   | { kind: "dry_run"; text: string };
 
-// `note` is set only by the interaction edit. The cron renderer leaves it unset,
-// so a stored reply is not drawn here until v1-5.
+// `note` is set only by the interaction edit. The cron render reads the stored reply.
 export function renderComponentsReview(
   input: ReviewMessageInput,
   mention: Mention,
@@ -46,8 +53,9 @@ export function renderComponentsReview(
   const metaRaw = metaLine(input.review) ?? "";
   const label = originalLabel(input.review);
   const originalRaw = input.review.originalBody ?? "";
-  const reply = replyLines(note);
-  const cap = Math.max(0, TEXT_LIMIT - textTotal(reply));
+  const banner = bannerLines(input);
+  const reply = replyLines(input.review, note);
+  const cap = Math.max(0, TEXT_LIMIT - textTotal([...banner, ...reply]));
   let bodyLimit = hasText(input.review.body) ? cap : 0;
   let originalLimit = label !== null && hasText(originalRaw) ? cap : 0;
   let metaLimit = metaRaw === "" ? 0 : cap;
@@ -75,6 +83,7 @@ export function renderComponentsReview(
         input,
         mention,
         [mentionText, title, laid.body, laid.original, laid.meta, footer],
+        banner,
         reply,
       );
     }
@@ -99,6 +108,7 @@ export function renderComponentsReview(
     input,
     mention,
     [mentionText, title, undefined, undefined, undefined, footer],
+    banner,
     reply,
   );
 }
@@ -107,11 +117,13 @@ function finish(
   input: ReviewMessageInput,
   mention: Mention,
   parts: readonly (string | undefined)[],
+  banner: readonly string[],
   reply: readonly string[],
 ): DiscordMessageBody {
   const [ping, title, body, original, meta, footer] = parts;
   const children: APIComponentInContainer[] = [];
   if (ping !== undefined) children.push(textDisplay(ping));
+  for (const line of banner) children.push(textDisplay(line));
   if (title !== undefined) children.push(textDisplay(title));
   if (body !== undefined) children.push(textDisplay(body));
   if (original !== undefined) children.push(textDisplay(original));
@@ -166,11 +178,35 @@ function originalText(
   return `${prefix}${truncate(raw, limit - charLength(prefix))}`;
 }
 
-function replyLines(note: ReplyNote | null): readonly string[] {
-  if (note === null) return [];
-  if (note.kind === "dry_run")
-    return [publishedReply(note.text), DRY_RUN_MARKER];
-  return [publishedReply(note.text), repliedBy(note.userId, note.at)];
+function bannerLines(input: ReviewMessageInput): readonly string[] {
+  if (!input.showUpdated) return [];
+  const previous = input.review.previousRating;
+  if (previous === null || previous === input.review.rating) {
+    return [REVIEW_UPDATED];
+  }
+  return [REVIEW_UPDATED, ratingChange(previous, input.review.rating)];
+}
+
+function replyLines(
+  review: StoredReview,
+  note: ReplyNote | null,
+): readonly string[] {
+  if (note !== null) {
+    if (note.kind === "dry_run") {
+      return [publishedReply(note.text), DRY_RUN_MARKER];
+    }
+    return [publishedReply(note.text), repliedBy(note.userId, note.at)];
+  }
+  if (review.replyText === null) return [];
+  const text = publishedReply(review.replyText);
+  if (review.repliedVia === "external" && review.replyModifiedAt !== null) {
+    return [text, repliedInConsole(review.replyModifiedAt)];
+  }
+  if (review.repliedVia === "bot" && review.repliedBy !== null) {
+    const at = review.repliedAt ?? review.replyModifiedAt;
+    if (at !== null) return [text, repliedBy(review.repliedBy, at)];
+  }
+  return [text];
 }
 
 function textDisplay(content: string): APITextDisplayComponent {
