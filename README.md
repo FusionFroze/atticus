@@ -45,7 +45,10 @@ Setup takes about 15 minutes. Google can take up to a day to apply the service a
 
 1. Go to discord.com/developers/applications and click **New Application**. Name it **Atticus** (or anything you like).
 2. On **General Information**, copy the **Application ID** and the **Public Key**. Both go in `wrangler.jsonc`.
-3. On **Bot**, click **Reset Token** and copy the token. It's shown once. This is the `DISCORD_BOT_TOKEN` secret. Turn off **Public Bot**, so only you can add it to servers. If Discord says a private application can't have a default authorization link, first set **Installation → Install Link** to **None**. Atticus needs no privileged intents.
+3. On the **Bot** page:
+   - **Reset Token**, then copy the token. It's shown only once. This is the `DISCORD_BOT_TOKEN` secret; keep it somewhere safe until Deploy.
+   - **Turn off Public Bot**, so nobody else can add your bot to their server. If Discord says a private application can't have a default authorization link, first set **Installation → Install Link** to **None**, then try again.
+   - Leave the privileged intents off. Atticus doesn't need them.
 4. Invite the bot to your server by opening this URL, with your Application ID in place of `APPLICATION_ID`:
 
    ```
@@ -65,7 +68,20 @@ npx wrangler login
 npx wrangler d1 create atticus
 ```
 
-`d1 create` prints a `database_id`. Open `wrangler.jsonc` and replace every `REPLACE_WITH_…` value:
+`d1 create` prints a `database_id`. If it offers to add the database to your config for you, answer **No**: `wrangler.jsonc` already has it, under the binding `DB`, and Atticus reads only that one. (If you said yes, delete the extra entry it added under `d1_databases`.) Then open `wrangler.jsonc` and replace every `REPLACE_WITH_…` value near the top of the file, keeping the quotes. The settings are in the top-level `"vars"` block:
+
+```jsonc
+  "vars": {
+    "APPS": [
+      { "store": "play", "id": "com.example.app", "name": "Example" }
+    ],
+    "DISCORD_APPLICATION_ID": "123456789012345678",
+    "DISCORD_PUBLIC_KEY": "the 64 hex characters from General Information",
+    "DISCORD_CHANNEL_ID": "234567890123456789",
+    "ALLOWED_USER_IDS": "345678901234567890",
+    "TIMEZONE": "Europe/Berlin"
+  },
+```
 
 - `d1_databases[0].database_id`: the id from `d1 create`.
 - `APPS`: your app's package name (for example `com.example.app`) and the name to show in messages. `consoleUrl` is optional: the address of the app's **Ratings and reviews** page in Play Console, for an "Open in Play Console" button.
@@ -74,7 +90,7 @@ npx wrangler d1 create atticus
 - `ALLOWED_USER_IDS`: your user id, plus anyone else who may reply, separated by commas.
 - `TIMEZONE`: your IANA time zone, such as `Europe/Berlin`. The weekly digest uses it.
 
-Ignore the `env.dev` block at the bottom. It is the maintainers' test Worker.
+Don't edit the `"env"` → `"dev"` block at the bottom. It has its own `vars` with the same names, for the maintainers' test Worker, and your deploy doesn't use it.
 
 Then create the tables and deploy:
 
@@ -82,6 +98,8 @@ Then create the tables and deploy:
 npm run db:migrate
 npm run deploy
 ```
+
+Wrangler warns that "multiple environments are defined" and no target environment was given. That's expected: with no `--env`, it uses the top-level settings, which are yours. The `env.dev` block is the maintainers' test Worker.
 
 On a new Cloudflare account, the first deploy asks you to pick a `workers.dev` subdomain. Note the URL it prints, such as `https://atticus.<your-subdomain>.workers.dev`.
 
