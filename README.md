@@ -241,17 +241,17 @@ Fix them all, run `npm run deploy` (or `wrangler secret put` for a secret), and 
 
 ## Upgrading
 
-Commit your `wrangler.jsonc` in your clone first, so `git pull` can merge new changes into it:
-
 ```sh
 git commit -am "My Atticus config"
-git pull
+git pull --no-rebase --no-edit
 npm i
 npm run db:migrate
 npm run deploy
 ```
 
-`db:migrate` applies only the new database migrations. When there are none, it says so.
+- **Why commit first:** `git pull` brings in new Atticus commits, and git won't merge them into a file with uncommitted edits. Committing your `wrangler.jsonc` keeps your values, and git merges the new changes around them. Once your config is committed, the first line has nothing to do and says so, which is fine.
+- `--no-edit` takes git's default merge message, so no text editor opens. If git reports a conflict in `wrangler.jsonc`, keep your values, then `git commit -am "Merge"`.
+- `db:migrate` applies only new database migrations. When there are none, it says so.
 
 ## License
 
