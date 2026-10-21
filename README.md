@@ -2,7 +2,9 @@
 
 Get your Google Play reviews in Discord and reply from chat. One free Cloudflare Worker, self-hosted.
 
-<!-- Demo GIF (v1-8): a new review arrives → Reply → the modal → the reply shows as published. -->
+![A new Google Play review arrives in Discord. Someone clicks Reply, types an answer in the pop-up and sends it, and the message updates to show the reply.](docs/media/demo.gif)
+
+*Recorded on a test server with an invented review, in dry-run mode, so nothing was published.*
 
 ## What it does
 
@@ -19,7 +21,7 @@ Get your Google Play reviews in Discord and reply from chat. One free Cloudflare
 - A **Discord** server where you can add a bot (Manage Server).
 - **Node.js 24** or later, and git.
 
-Setup takes about 15 minutes. Google can take up to a day to apply the service account's permissions, so start with Google setup.
+Setup takes about 20 minutes. Google can take up to a day to apply the service account's permissions, so start with Google setup.
 
 ## Setup
 
@@ -180,6 +182,7 @@ These come from Google's API and the free plan.
 - **Not instant.** A new review shows up within about 15 minutes of Google listing it. A first run with a large backlog, or a burst of reviews, is posted over several runs (about 40 messages per run).
 - **Replies are plain text, up to 350 characters**, Google's limit.
 - **CPU time.** A check uses about 10–20 ms of CPU, around the free plan's 10 ms guideline. Cloudflare tolerated this in testing, with no runs stopped. Cloudflare's dashboard shows any that are, under **Exceeded CPU Time Limits**.
+- **The first digest can come early.** If you install Atticus within a day after your `DIGEST_DAY` and `DIGEST_HOUR`, it posts that week's digest on its first run.
 
 ## Troubleshooting
 
@@ -250,6 +253,18 @@ npm run deploy
 ```
 
 The first line commits your `wrangler.jsonc`, so the pull can't overwrite it. If git reports a conflict in that file, keep your values, then run `git commit -am "Merge"`.
+
+## Roadmap
+
+Planned after v1. None of it is built yet.
+
+- **Slash commands**, such as a status check.
+- **A channel per app**, through an `APPS[].channelId` field.
+- **Telegram**, to get reviews and reply there as well.
+- **AI reply drafts** that pre-fill the reply box. A person still reviews and sends every reply.
+- **App Store reviews**, alongside Google Play.
+- **No early first digest** on a new install.
+- **A timed setup from scratch**, to confirm the setup time above.
 
 ## License
 

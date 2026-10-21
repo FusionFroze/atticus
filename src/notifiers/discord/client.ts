@@ -7,7 +7,7 @@ export const DISCORD_API = "https://discord.com/api/v10";
 
 // V44. Keep this in step with package.json when the version changes.
 export const USER_AGENT =
-  "DiscordBot (https://github.com/fusionfroze/atticus, 0.1.0)";
+  "DiscordBot (https://github.com/fusionfroze/atticus, 1.0.0)";
 
 // A 429 at or above this is left for the next run. Under it, one retry is allowed.
 const RETRY_UNDER_MS = 2_000;

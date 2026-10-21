@@ -26,7 +26,7 @@ The short, public list of how Atticus is built and why. Each line points to the 
 - **Buttons carry a short numeric review id** (V25), because Discord's `custom_id` is capped at 100 characters.
 - **The Google access token is cached in memory, not stored** (V26).
 - **A run reads its state once and writes its bookkeeping once** (v1-7). One D1 batch takes the lease and reads every `state` row; one batch at the end records the poll, prunes and releases the lease. Each message sent costs two D1 requests. That cut a busy run from about 220 D1 requests to about 90.
-- **Cron CPU sits around the free plan's 10 ms, and that's accepted** (v1-7). Every cron starts in a fresh isolate, so it pays a fixed cold-start cost of about 9–15 ms. Signing and `Intl` were measured at about 1 ms or less, so caching the token in D1 wouldn't help. No run was stopped in testing; the dashboard's "Exceeded CPU Time Limits" is the thing to watch.
+- **Cron CPU sits around the free plan's 10 ms, and that's accepted** (v1-7). Almost every cron starts in a fresh isolate, so it pays a fixed cold-start cost of about 9–15 ms. Signing and `Intl` were measured at about 1 ms or less, so caching the token in D1 wouldn't help. No run was stopped in testing; the dashboard's "Exceeded CPU Time Limits" is the thing to watch.
 
 ## Polling and reviews
 
