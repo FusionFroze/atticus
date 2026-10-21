@@ -264,7 +264,6 @@ Planned after v1. None of it is built yet.
 - **AI reply drafts** that pre-fill the reply box. A person still reviews and sends every reply.
 - **App Store reviews**, alongside Google Play.
 - **No early first digest** on a new install.
-- **A timed setup from scratch**, to confirm the setup time above.
 
 ## License
 
