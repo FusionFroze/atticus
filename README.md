@@ -2,7 +2,7 @@
 
 Get your Google Play reviews in Discord and reply from chat. One free Cloudflare Worker, self-hosted.
 
-![A new Google Play review arrives in Discord. Someone clicks Reply, types an answer in the pop-up and sends it, and the message updates to show the reply.](docs/media/demo.gif)
+<img src="docs/media/demo.gif" width="600" alt="A new Google Play review arrives in Discord. Someone clicks Reply, types an answer in the pop-up and sends it, and the message updates to show the reply.">
 
 *Recorded on a test server with an invented review, in dry-run mode, so nothing was published.*
 
